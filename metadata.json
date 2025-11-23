@@ -1,0 +1,5 @@
+{
+  "name": "FluxShare - Secure Transfer",
+  "description": "A Material 3 Expressive file transfer dashboard featuring AI-generated SFTP credentials and simulated P2P sharing.",
+  "requestFramePermissions": []
+}

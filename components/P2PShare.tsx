@@ -1,0 +1,569 @@
+
+import React, { useState, useRef, useEffect } from 'react';
+import { UploadCloud, X, Download, CheckCircle2, Loader2, Wifi, File as FileIcon, Send, Radio, Copy, ShieldCheck, RefreshCw, Search, ArrowRight, MessageSquare, Terminal, Bot } from 'lucide-react';
+import { FileTransfer, ChatMessage } from '../types';
+import { generateQuickReplies } from '../services/geminiService';
+
+declare const Peer: any;
+const CHUNK_SIZE = 16 * 1024;
+
+// Helper for UUID generation (crypto.randomUUID not available in insecure contexts)
+const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+};
+
+const P2PShare: React.FC = () => {
+    const [mode, setMode] = useState<'send' | 'receive' | 'menu'>('menu');
+    const [peerId, setPeerId] = useState<string>('');
+    const [targetId, setTargetId] = useState<string>('');
+    const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+    const [logs, setLogs] = useState<string[]>([]);
+
+    // Chat State
+    const [activeTab, setActiveTab] = useState<'logs' | 'chat'>('logs');
+    const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+    const [chatInput, setChatInput] = useState('');
+    const [quickReplies, setQuickReplies] = useState<string[]>([]);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    // File State
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [transferProgress, setTransferProgress] = useState(0);
+    const [receivedFileUrl, setReceivedFileUrl] = useState<string | null>(null);
+    const [receivedMeta, setReceivedMeta] = useState<{ name: string, size: number, mime: string } | null>(null);
+
+    const peerRef = useRef<any>(null);
+    const connRef = useRef<any>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const receivedChunksRef = useRef<ArrayBuffer[]>([]);
+    const receivedSizeRef = useRef(0);
+    const chatEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const initPeer = () => {
+            // Safety check for PeerJS global
+            if (typeof Peer === 'undefined') {
+                console.error('PeerJS not loaded');
+                setConnectionStatus('error');
+                addLog('CRITICAL ERROR: PeerJS library not loaded. Check internet connection or ad blockers.');
+                addSystemMessage('System failure: PeerJS missing.');
+                return;
+            }
+
+            try {
+                const customId = `NODE-${Math.floor(Math.random() * 9000) + 1000}`;
+                console.log("Initializing Peer with ID:", customId);
+
+                // Parse ICE servers from env
+                // @ts-ignore
+                const iceServers = (import.meta.env.VITE_ICE_SERVERS || 'stun:stun.l.google.com:19302')
+                    .split(',')
+                    .map((url: string) => ({ urls: url.trim() }));
+
+                const peerConfig: any = {
+                    debug: 2,
+                    config: {
+                        iceServers: iceServers
+                    }
+                };
+
+                // Add optional self-hosted config
+                // @ts-ignore
+                const envHost = import.meta.env.VITE_PEER_HOST;
+                if (envHost && envHost.trim() !== '') {
+                    // @ts-ignore
+                    peerConfig.host = envHost;
+                    // @ts-ignore
+                    peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
+                    // @ts-ignore
+                    peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
+                }
+                // Set secure flag based on environment (development => ws, production => wss)
+                if (import.meta.env.VITE_ENV === 'development') {
+                    peerConfig.secure = false;
+                } else {
+                    peerConfig.secure = true;
+                }
+
+                console.log("Peer Config:", peerConfig);
+                const peer = new Peer(customId, peerConfig);
+
+                peer.on('open', (id: string) => {
+                    setPeerId(id);
+                    addLog(`System initialized. ID: ${id}`);
+                    addSystemMessage("Secure terminal ready.");
+                    setConnectionStatus('disconnected'); // Ready to connect
+                });
+
+                peer.on('connection', (conn: any) => {
+                    handleConnection(conn);
+                });
+
+                peer.on('error', (err: any) => {
+                    console.error("Peer error:", err);
+                    setConnectionStatus('error');
+                    addLog(`CRITICAL ERROR: ${err.type} - ${err.message || ''}`);
+                    addSystemMessage(`Error: ${err.type}`);
+                });
+
+                peer.on('disconnected', () => {
+                    addLog('Peer disconnected from server. Reconnecting...');
+                    peer.reconnect();
+                });
+
+                peerRef.current = peer;
+            } catch (err: any) {
+                console.error("Peer initialization exception:", err);
+                setConnectionStatus('error');
+                addLog(`INIT EXCEPTION: ${err.message || err}`);
+            }
+        };
+
+        initPeer();
+        return () => {
+            if (peerRef.current) {
+                peerRef.current.destroy();
+                peerRef.current = null;
+            }
+        };
+    }, []);
+
+    // Scroll to bottom of chat
+    useEffect(() => {
+        if (activeTab === 'chat') {
+            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            setUnreadCount(0);
+        }
+    }, [chatHistory, activeTab]);
+
+    const addLog = (msg: string) => {
+        setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev.slice(0, 50)]);
+    };
+
+    const addSystemMessage = (text: string) => {
+        setChatHistory(prev => [...prev, { id: generateUUID(), sender: 'system', text, timestamp: Date.now() }]);
+    };
+
+    const handleConnection = (conn: any) => {
+        connRef.current = conn;
+        setConnectionStatus('connecting');
+        addLog(`Incoming handshake from ${conn.peer}...`);
+
+        conn.on('open', () => {
+            setConnectionStatus('connected');
+            addLog('Secure tunnel established.');
+            addSystemMessage(`Uplink established with ${conn.peer}`);
+            setActiveTab('chat');
+        });
+
+        conn.on('data', (data: any) => {
+            handleData(data);
+        });
+
+        conn.on('close', () => {
+            setConnectionStatus('disconnected');
+            addLog('Connection severed.');
+            addSystemMessage('Connection lost.');
+            resetTransfer();
+        });
+    };
+
+    const connectToPeer = () => {
+        if (!targetId) return;
+        if (!peerRef.current) return;
+
+        addLog(`Targeting peer: ${targetId}...`);
+        setConnectionStatus('connecting');
+        const conn = peerRef.current.connect(targetId, { reliable: true });
+        handleConnection(conn);
+    };
+
+    const handleData = (data: any) => {
+        if (data.type === 'meta') {
+            receivedChunksRef.current = [];
+            receivedSizeRef.current = 0;
+            setReceivedMeta({ name: data.name, size: data.size, mime: data.mime });
+            setTransferProgress(0);
+            addLog(`Receiving stream: ${data.name}`);
+            addSystemMessage(`Incoming data stream: ${data.name}`);
+        } else if (data.type === 'chunk') {
+            receivedChunksRef.current.push(data.data);
+            receivedSizeRef.current += data.data.byteLength;
+            if (receivedMeta) {
+                setTransferProgress(Math.round((receivedSizeRef.current / receivedMeta.size) * 100));
+            }
+        } else if (data.type === 'end') {
+            addLog('Transfer complete. Reassembling...');
+            addSystemMessage('Data stream verified. Transfer complete.');
+            const blob = new Blob(receivedChunksRef.current, { type: receivedMeta?.mime || 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            setReceivedFileUrl(url);
+            setTransferProgress(100);
+        } else if (data.type === 'chat') {
+            setChatHistory(prev => [...prev, { id: generateUUID(), sender: 'peer', text: data.text, timestamp: data.timestamp }]);
+            if (activeTab !== 'chat') {
+                setUnreadCount(prev => prev + 1);
+            }
+        }
+    };
+
+    const resetTransfer = () => {
+        setTransferProgress(0);
+        setSelectedFile(null);
+        setReceivedFileUrl(null);
+        setReceivedMeta(null);
+        receivedChunksRef.current = [];
+        receivedSizeRef.current = 0;
+    };
+
+    const sendFile = async () => {
+        if (!selectedFile || !connRef.current) return;
+
+        const file = selectedFile;
+        addLog(`Starting upload: ${file.name}`);
+        addSystemMessage(`Initiating upload: ${file.name}`);
+
+        connRef.current.send({ type: 'meta', name: file.name, size: file.size, mime: file.type });
+
+        const reader = new FileReader();
+        let offset = 0;
+
+        reader.onload = (e) => {
+            if (e.target?.result) {
+                connRef.current.send({ type: 'chunk', data: e.target.result });
+                offset += CHUNK_SIZE;
+                setTransferProgress(Math.min(100, Math.round((offset / file.size) * 100)));
+                if (offset < file.size) readNextChunk();
+                else {
+                    connRef.current.send({ type: 'end' });
+                    addLog('Upload successfully completed.');
+                    addSystemMessage('Upload complete.');
+                }
+            }
+        };
+        const readNextChunk = () => {
+            const slice = file.slice(offset, offset + CHUNK_SIZE);
+            reader.readAsArrayBuffer(slice);
+        };
+        readNextChunk();
+    };
+
+    // --- CHAT LOGIC ---
+    const sendChatMessage = (text: string = chatInput) => {
+        if (!text.trim() || !connRef.current) return;
+
+        const msg = { type: 'chat', text: text, timestamp: Date.now() };
+        connRef.current.send(msg);
+
+        setChatHistory(prev => [...prev, { id: generateUUID(), sender: 'me', text: text, timestamp: Date.now() }]);
+        setChatInput('');
+        setQuickReplies([]);
+    };
+
+    const handleAiAssist = async () => {
+        if (!connRef.current) return;
+        setAiLoading(true);
+        // Get last peer message for context
+        const lastPeerMsg = [...chatHistory].reverse().find(m => m.sender === 'peer')?.text || '';
+
+        const suggestions = await generateQuickReplies(lastPeerMsg);
+        setQuickReplies(suggestions);
+        setAiLoading(false);
+    };
+
+    // MAIN MENU
+    if (mode === 'menu') {
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fadeIn h-[500px]">
+                <button
+                    onClick={() => setMode('send')}
+                    className="group relative bg-[#00f3ff]/5 border border-[#00f3ff]/30 hover:border-[#00f3ff] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg"
+                >
+                    <div className="absolute inset-0 bg-gradient-to-br from-[#00f3ff]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="relative z-10 flex flex-col items-center">
+                        <Send size={64} className="text-[#00f3ff] mb-6 group-hover:scale-110 transition-transform duration-500" />
+                        <h3 className="text-4xl font-display font-bold text-white tracking-tighter">TRANSMITTER</h3>
+                        <p className="font-mono text-[#00f3ff] text-xs mt-2 tracking-[0.3em]">INIT_SOURCE_PROTOCOL</p>
+                    </div>
+                </button>
+
+                <button
+                    onClick={() => setMode('receive')}
+                    className="group relative bg-[#bc13fe]/5 border border-[#bc13fe]/30 hover:border-[#bc13fe] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg"
+                >
+                    <div className="absolute inset-0 bg-gradient-to-bl from-[#bc13fe]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="relative z-10 flex flex-col items-center">
+                        <Download size={64} className="text-[#bc13fe] mb-6 group-hover:scale-110 transition-transform duration-500" />
+                        <h3 className="text-4xl font-display font-bold text-white tracking-tighter">RECEIVER</h3>
+                        <p className="font-mono text-[#bc13fe] text-xs mt-2 tracking-[0.3em]">INIT_TARGET_PROTOCOL</p>
+                    </div>
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="animate-fadeIn flex flex-col gap-6">
+            {/* Top Bar */}
+            <div className="flex items-center justify-between border-b border-[#333] pb-4">
+                <button
+                    onClick={() => setMode('menu')}
+                    className="flex items-center gap-2 text-gray-500 hover:text-white font-mono text-xs uppercase tracking-widest transition-colors"
+                >
+                    <ArrowRight size={16} className="rotate-180" /> Abort Sequence
+                </button>
+                <div className={`px-4 py-1 font-display text-sm font-bold uppercase tracking-wider rounded-full flex items-center gap-2 ${connectionStatus === 'connected' ? 'bg-[#00f3ff]/20 text-[#00f3ff]' : 'bg-[#222] text-gray-500'}`}>
+                    <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-[#00f3ff] animate-pulse' : 'bg-gray-500'}`}></div>
+                    {connectionStatus}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* LEFT COLUMN: Connection Info & CHAT */}
+                <div className="lg:col-span-5 space-y-4 flex flex-col h-[600px]">
+                    {/* My ID */}
+                    <div className="p-4 border border-[#00f3ff]/30 bg-[#0a0a15] relative overflow-hidden rounded-lg shrink-0">
+                        <span className="text-[#00f3ff] font-mono text-[10px] uppercase tracking-widest absolute top-2 left-3">LOCAL_NODE_ID</span>
+                        <div className="mt-4 flex items-center justify-between bg-[#000] p-2 rounded border border-[#00f3ff]/10">
+                            <span className="font-mono text-lg text-white tracking-wider truncate mr-2">{peerId || '...'}</span>
+                            <button onClick={() => navigator.clipboard.writeText(peerId)} className="text-[#00f3ff] hover:text-white transition-colors shrink-0"><Copy size={16} /></button>
+                        </div>
+                    </div>
+
+                    {/* Connect Form */}
+                    {connectionStatus !== 'connected' && (
+                        <div className="p-4 border border-[#bc13fe]/30 bg-[#0a0a15] rounded-lg shrink-0">
+                            <label className="text-[#bc13fe] font-mono text-[10px] uppercase tracking-widest block mb-2">TARGET_NODE_ID</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={targetId}
+                                    onChange={(e) => setTargetId(e.target.value.toUpperCase())}
+                                    className="flex-1 bg-black border border-[#333] rounded p-2 text-white font-mono text-sm outline-none focus:border-[#bc13fe] transition-colors"
+                                    placeholder="PASTE ID HERE"
+                                />
+                                <button
+                                    onClick={connectToPeer}
+                                    disabled={!targetId}
+                                    className="bg-[#bc13fe] text-white p-2 rounded hover:bg-[#a010d8] transition-colors disabled:opacity-50"
+                                >
+                                    <Search size={20} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TABBED INTERFACE: CHAT & LOGS */}
+                    <div className="flex-1 flex flex-col border border-[#333] bg-[#0a0a12] rounded-lg overflow-hidden">
+                        <div className="flex border-b border-[#333]">
+                            <button
+                                onClick={() => setActiveTab('logs')}
+                                className={`flex-1 py-2 font-mono text-xs uppercase tracking-wider flex items-center justify-center gap-2 ${activeTab === 'logs' ? 'bg-[#222] text-white' : 'bg-[#0a0a12] text-gray-500 hover:text-gray-300'}`}
+                            >
+                                <Terminal size={12} /> System Logs
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('chat')}
+                                className={`flex-1 py-2 font-mono text-xs uppercase tracking-wider flex items-center justify-center gap-2 relative ${activeTab === 'chat' ? 'bg-[#222] text-[#00f3ff]' : 'bg-[#0a0a12] text-gray-500 hover:text-gray-300'}`}
+                            >
+                                <MessageSquare size={12} /> Secure Uplink
+                                {unreadCount > 0 && <span className="absolute top-1 right-2 bg-[#bc13fe] text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center">{unreadCount}</span>}
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-hidden relative">
+                            {activeTab === 'logs' ? (
+                                <div className="h-full p-4 font-mono text-[10px] text-green-400/80 overflow-y-auto scrollbar-thin">
+                                    {logs.map((log, i) => <div key={i} className="mb-1">{log}</div>)}
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col">
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin bg-[#050508]">
+                                        {chatHistory.length === 0 && (
+                                            <div className="text-center text-gray-600 font-mono text-xs mt-10 opacity-50">
+                                                <ShieldCheck size={24} className="mx-auto mb-2" />
+                                                ENCRYPTED CHANNEL IDLE
+                                            </div>
+                                        )}
+                                        {chatHistory.map((msg) => (
+                                            <div key={msg.id} className={`flex flex-col ${msg.sender === 'me' ? 'items-end' : msg.sender === 'system' ? 'items-center' : 'items-start'}`}>
+                                                {msg.sender === 'system' ? (
+                                                    <span className="text-[9px] text-gray-600 font-mono border border-gray-800 px-2 py-0.5 rounded-full my-1">{msg.text}</span>
+                                                ) : (
+                                                    <div className={`max-w-[85%] p-2 rounded text-xs font-mono leading-relaxed break-words ${msg.sender === 'me'
+                                                        ? 'bg-[#00f3ff]/10 text-[#00f3ff] border border-[#00f3ff]/20 rounded-tr-none'
+                                                        : 'bg-[#bc13fe]/10 text-[#bc13fe] border border-[#bc13fe]/20 rounded-tl-none'
+                                                        }`}>
+                                                        {msg.text}
+                                                    </div>
+                                                )}
+                                                {msg.sender !== 'system' && <span className="text-[8px] text-gray-700 mt-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                                            </div>
+                                        ))}
+                                        <div ref={chatEndRef} />
+                                    </div>
+
+                                    {/* Quick Replies */}
+                                    {quickReplies.length > 0 && (
+                                        <div className="flex gap-2 p-2 bg-[#0a0a15] overflow-x-auto scrollbar-none border-t border-[#222]">
+                                            {quickReplies.map((reply, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => sendChatMessage(reply)}
+                                                    className="whitespace-nowrap bg-[#00f3ff]/10 border border-[#00f3ff]/30 text-[#00f3ff] text-[10px] px-2 py-1 rounded hover:bg-[#00f3ff]/20 transition-colors font-mono"
+                                                >
+                                                    {reply}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Input Area */}
+                                    <div className="p-2 border-t border-[#333] bg-[#0a0a12] flex gap-2">
+                                        <button
+                                            onClick={handleAiAssist}
+                                            disabled={aiLoading || connectionStatus !== 'connected'}
+                                            className="p-2 rounded bg-[#222] text-[#bc13fe] hover:bg-[#bc13fe]/20 disabled:opacity-30 border border-[#333] transition-colors"
+                                            title="AI Assist"
+                                        >
+                                            {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
+                                        </button>
+                                        <input
+                                            type="text"
+                                            value={chatInput}
+                                            onChange={(e) => setChatInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
+                                            disabled={connectionStatus !== 'connected'}
+                                            placeholder={connectionStatus === 'connected' ? "Enter secure message..." : "Waiting for link..."}
+                                            className="flex-1 bg-black border border-[#333] rounded px-3 py-1 text-xs text-white font-mono outline-none focus:border-[#00f3ff] placeholder-gray-700"
+                                        />
+                                        <button
+                                            onClick={() => sendChatMessage()}
+                                            disabled={!chatInput.trim() || connectionStatus !== 'connected'}
+                                            className="text-[#00f3ff] hover:text-white disabled:opacity-30 transition-colors p-1"
+                                        >
+                                            <Send size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* RIGHT COLUMN: Action Area */}
+                <div className="lg:col-span-7 border border-[#333] bg-[#0a0a12] rounded-lg relative min-h-[600px] flex flex-col items-center justify-center p-8 overflow-hidden">
+                    {/* Background Grid */}
+                    <div className="absolute inset-0 opacity-10 pointer-events-none"
+                        style={{
+                            backgroundImage: `radial-gradient(${mode === 'send' ? '#00f3ff' : '#bc13fe'} 1px, transparent 1px)`,
+                            backgroundSize: '30px 30px'
+                        }}
+                    />
+
+                    {connectionStatus === 'connected' ? (
+                        <div className="w-full max-w-md relative z-10">
+                            {mode === 'send' ? (
+                                <div className="space-y-6 animate-fadeIn">
+                                    {!selectedFile ? (
+                                        <div
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="h-64 border-2 border-dashed border-[#333] hover:border-[#00f3ff] hover:bg-[#00f3ff]/5 rounded-xl flex flex-col items-center justify-center cursor-pointer group transition-all duration-300"
+                                        >
+                                            <div className="w-20 h-20 rounded-full bg-[#222] group-hover:bg-[#00f3ff]/20 flex items-center justify-center mb-6 transition-colors">
+                                                <UploadCloud size={32} className="text-gray-400 group-hover:text-[#00f3ff] transition-colors" />
+                                            </div>
+                                            <span className="font-display text-lg text-gray-400 group-hover:text-white tracking-wide">SELECT DATA PACKET</span>
+                                            <span className="font-mono text-xs text-[#00f3ff] mt-2 opacity-0 group-hover:opacity-100 transition-opacity">CLICK TO BROWSE</span>
+                                            <input type="file" className="hidden" ref={fileInputRef} onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
+                                        </div>
+                                    ) : (
+                                        <div className="bg-[#111] border border-[#00f3ff]/50 rounded-xl p-6 shadow-[0_0_30px_rgba(0,243,255,0.1)]">
+                                            <div className="flex justify-between items-start mb-8">
+                                                <div className="flex items-center gap-4">
+                                                    <FileIcon size={32} className="text-[#00f3ff]" />
+                                                    <div>
+                                                        <h4 className="text-white font-bold truncate max-w-[200px]">{selectedFile.name}</h4>
+                                                        <span className="text-xs text-gray-500 font-mono">{(selectedFile.size / 1024).toFixed(2)} KB</span>
+                                                    </div>
+                                                </div>
+                                                {transferProgress === 0 && <button onClick={() => setSelectedFile(null)}><X className="text-gray-500 hover:text-white" /></button>}
+                                            </div>
+
+                                            {transferProgress > 0 ? (
+                                                <div>
+                                                    <div className="h-2 bg-[#222] w-full mb-3 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-[#00f3ff] transition-all duration-300" style={{ width: `${transferProgress}%` }}></div>
+                                                    </div>
+                                                    <div className="flex justify-between font-mono text-[10px] text-[#00f3ff]">
+                                                        <span>TRANSMITTING...</span>
+                                                        <span>{transferProgress}%</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={sendFile}
+                                                    className="w-full py-3 bg-[#00f3ff] text-black font-bold font-display uppercase tracking-widest hover:bg-white transition-colors rounded-lg shadow-lg shadow-[#00f3ff]/20"
+                                                >
+                                                    INITIATE UPLOAD
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                // RECEIVE UI
+                                <div className="text-center animate-fadeIn">
+                                    {!receivedMeta ? (
+                                        <div className="animate-pulse opacity-50 flex flex-col items-center">
+                                            <div className="w-24 h-24 rounded-full border-4 border-[#bc13fe]/30 flex items-center justify-center mb-6">
+                                                <Radio size={48} className="text-[#bc13fe]" />
+                                            </div>
+                                            <h3 className="font-display text-2xl text-white tracking-widest">AWAITING SIGNAL</h3>
+                                            <p className="font-mono text-xs text-[#bc13fe] mt-2">CHANNEL OPEN</p>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-[#111] border border-[#bc13fe]/50 rounded-xl p-6 shadow-[0_0_30px_rgba(188,19,254,0.1)]">
+                                            <h4 className="text-white font-bold mb-6 font-display tracking-wider">INCOMING DATA DETECTED</h4>
+                                            <div className="flex items-center gap-3 mb-6 bg-[#222] p-3 rounded">
+                                                <FileIcon size={20} className="text-[#bc13fe]" />
+                                                <span className="text-sm font-mono">{receivedMeta.name}</span>
+                                            </div>
+
+                                            <div className="h-2 bg-[#222] w-full mb-4 rounded-full overflow-hidden">
+                                                <div className="h-full bg-[#bc13fe] transition-all duration-300" style={{ width: `${transferProgress}%` }}></div>
+                                            </div>
+
+                                            {receivedFileUrl ? (
+                                                <a href={receivedFileUrl} download={receivedMeta.name} className="block w-full py-3 bg-[#bc13fe] text-white font-bold font-display uppercase tracking-widest hover:bg-white hover:text-black transition-colors rounded-lg">
+                                                    SAVE TO DISK
+                                                </a>
+                                            ) : (
+                                                <div className="text-[#bc13fe] font-mono text-xs animate-pulse">RECEIVING PACKETS...</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="text-center opacity-30 flex flex-col items-center">
+                            <ShieldCheck size={80} className="mb-4" />
+                            <h3 className="font-display text-3xl tracking-widest">LINK REQUIRED</h3>
+                            <p className="font-mono text-sm mt-2 max-w-xs">ESTABLISH PEER CONNECTION TO ENABLE TRANSFER PROTOCOLS</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default P2PShare;

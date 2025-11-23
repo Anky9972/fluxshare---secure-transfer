@@ -1,0 +1,188 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FluxShare 2099 // NETRUNNER</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        /* NEW PALETTE: Cyan & Purple */
+        --cyber-primary: #00f3ff; /* Cyan */
+        --cyber-secondary: #bc13fe; /* Purple */
+        --cyber-bg: #050510; /* Deep Blue/Black */
+        --cyber-text: #e0e0ff;
+      }
+      
+      body {
+        font-family: 'Rajdhani', sans-serif;
+        background-color: var(--cyber-bg);
+        color: var(--cyber-text);
+        overflow-x: hidden;
+      }
+
+      /* HEADER / DISPLAY FONTS */
+      .font-display {
+        font-family: 'Orbitron', sans-serif;
+      }
+      .font-mono {
+        font-family: 'Share Tech Mono', monospace;
+      }
+
+      /* NOISE TEXTURE */
+      .noise-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 50;
+        opacity: 0.04;
+        background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuNjUiIG51bU9jdGF2ZXM9IjMiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjbm9pc2UpIiBvcGFjaXR5PSIxIi8+PC9zdmc+');
+      }
+
+      /* CUSTOM SCROLLBAR */
+      ::-webkit-scrollbar {
+        width: 6px;
+        background: var(--cyber-bg);
+      }
+      ::-webkit-scrollbar-track {
+        background: #0a0a1a;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--cyber-secondary);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--cyber-primary);
+      }
+
+      /* 2099 BUTTON STYLES */
+      .cyber-button {
+        position: relative;
+        background: rgba(0, 243, 255, 0.05);
+        border: 1px solid var(--cyber-primary);
+        color: var(--cyber-primary);
+        text-transform: uppercase;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+      }
+      
+      .cyber-button:hover {
+        background: var(--cyber-primary);
+        color: #000;
+        box-shadow: 0 0 25px rgba(0, 243, 255, 0.4);
+        transform: translateY(-2px);
+      }
+
+      .cyber-button-secondary {
+        position: relative;
+        background: rgba(188, 19, 254, 0.05);
+        border: 1px solid var(--cyber-secondary);
+        color: var(--cyber-secondary);
+        text-transform: uppercase;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+      }
+
+      .cyber-button-secondary:hover {
+        background: var(--cyber-secondary);
+        color: #fff;
+        box-shadow: 0 0 25px rgba(188, 19, 254, 0.4);
+      }
+
+      /* GLITCH ANIMATIONS */
+      .glitch {
+        position: relative;
+      }
+      .glitch::before,
+      .glitch::after {
+        content: attr(data-text);
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .glitch::before {
+        left: 2px;
+        text-shadow: -1px 0 var(--cyber-secondary);
+        clip: rect(24px, 550px, 90px, 0);
+        animation: glitch-anim-2 3s infinite linear alternate-reverse;
+      }
+      .glitch::after {
+        left: -2px;
+        text-shadow: -1px 0 var(--cyber-primary);
+        clip: rect(85px, 550px, 140px, 0);
+        animation: glitch-anim 2.5s infinite linear alternate-reverse;
+      }
+
+      @keyframes glitch-anim {
+        0% { clip: rect(20px, 9999px, 15px, 0); }
+        20% { clip: rect(60px, 9999px, 70px, 0); }
+        40% { clip: rect(20px, 9999px, 15px, 0); }
+        60% { clip: rect(80px, 9999px, 90px, 0); }
+        80% { clip: rect(10px, 9999px, 5px, 0); }
+        100% { clip: rect(40px, 9999px, 60px, 0); }
+      }
+      @keyframes glitch-anim-2 {
+        0% { clip: rect(60px, 9999px, 70px, 0); }
+        20% { clip: rect(10px, 9999px, 5px, 0); }
+        40% { clip: rect(80px, 9999px, 90px, 0); }
+        60% { clip: rect(20px, 9999px, 15px, 0); }
+        80% { clip: rect(40px, 9999px, 60px, 0); }
+        100% { clip: rect(10px, 9999px, 5px, 0); }
+      }
+
+      .glass-panel {
+        background: rgba(10, 10, 25, 0.7);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      /* PHYSICS FLOAT */
+      @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+        100% { transform: translateY(0px); }
+      }
+      .animate-float {
+        animation: float 4s ease-in-out infinite;
+      }
+      
+      .animate-spin-slow {
+        animation: spin 3s linear infinite;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      /* Ensure Hidden Elements are actually hidden */
+      .hidden {
+        display: none !important;
+      }
+
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+        "react/": "https://aistudiocdn.com/react@^19.2.0/",
+        "react": "https://aistudiocdn.com/react@^19.2.0",
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
+      }
+    }
+    </script>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
