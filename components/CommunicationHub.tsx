@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, Mic, MicOff, VideoOff, Phone, PhoneOff, Users, MessageSquare, Send, Search, Wifi, ShieldCheck, Activity } from 'lucide-react';
+import { Video, Mic, MicOff, VideoOff, Phone, PhoneOff, Users, MessageSquare, Send, Search, Wifi, ShieldCheck, Activity, SwitchCamera } from 'lucide-react';
 import { ChatMessage } from '../types';
 
 declare const Peer: any;
@@ -23,6 +23,7 @@ const CommunicationHub: React.FC = () => {
     const [isAudioEnabled, setIsAudioEnabled] = useState(true);
     const [logs, setLogs] = useState<string[]>([]);
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+    const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
     const [chatInput, setChatInput] = useState('');
 
     const peerRef = useRef<any>(null);
@@ -231,10 +232,49 @@ const CommunicationHub: React.FC = () => {
         setChatInput('');
     };
 
+    const flipCamera = async () => {
+        const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+
+        try {
+            // Stop current tracks
+            if (localStreamRef.current) {
+                localStreamRef.current.getTracks().forEach(track => track.stop());
+            }
+
+            // Get new stream with flipped camera
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: newFacingMode },
+                audio: true
+            });
+
+            localStreamRef.current = stream;
+            if (localVideoRef.current) {
+                localVideoRef.current.srcObject = stream;
+            }
+
+            setFacingMode(newFacingMode);
+            addLog(`Switched to ${newFacingMode === 'user' ? 'front' : 'back'} camera`);
+
+            // If in a call, update the stream
+            if (currentCallRef.current && callStatus === 'connected') {
+                const videoTrack = stream.getVideoTracks()[0];
+                const sender = currentCallRef.current.peerConnection
+                    .getSenders()
+                    .find((s: any) => s.track && s.track.kind === 'video');
+                if (sender) {
+                    sender.replaceTrack(videoTrack);
+                }
+            }
+        } catch (err) {
+            addLog('Could not flip camera');
+            console.error(err);
+        }
+    };
+
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[70vh]">
+        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 min-h-[60vh] lg:h-[70vh] overflow-y-auto">
             {/* Left Panel: Controls & Logs */}
-            <div className="lg:col-span-1 flex flex-col gap-4">
+            <div className="lg:col-span-1 flex flex-col gap-4 order-1 lg:order-1">
                 {/* ID Card */}
                 <div className="bg-[#050510]/80 border border-[#00f3ff]/30 p-6 rounded-xl backdrop-blur-md relative overflow-hidden group">
                     <div className="absolute inset-0 bg-[#00f3ff]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -287,7 +327,7 @@ const CommunicationHub: React.FC = () => {
                     )}
 
                     {/* Logs */}
-                    <div className="flex-1 bg-black/50 rounded-lg p-4 font-mono text-xs overflow-y-auto border border-white/10 max-h-[200px]">
+                    <div className="flex-1 bg-black/50 rounded-lg p-4 font-mono text-xs overflow-y-auto border border-white/10 max-h-[150px] lg:max-h-[200px]">
                         {logs.map((log, i) => (
                             <div key={i} className="mb-1 text-gray-400 border-b border-white/5 pb-1 last:border-0">
                                 <span className="text-[#00f3ff] mr-2">➜</span>
@@ -299,8 +339,8 @@ const CommunicationHub: React.FC = () => {
             </div>
 
             {/* Center Panel: Video Feeds */}
-            <div className="lg:col-span-2 flex flex-col gap-4">
-                <div className="flex-1 bg-black rounded-xl border border-[#333] relative overflow-hidden">
+            <div className="lg:col-span-2 flex flex-col gap-4 order-2 lg:order-2">
+                <div className="min-h-[300px] lg:flex-1 bg-black rounded-xl border border-[#333] relative overflow-hidden">
                     {/* Remote Video */}
                     <video
                         ref={remoteVideoRef}
@@ -321,7 +361,7 @@ const CommunicationHub: React.FC = () => {
                     )}
 
                     {/* Local Video (PIP) */}
-                    <div className="absolute bottom-4 right-4 w-48 h-36 bg-[#111] border border-[#00f3ff]/30 rounded-lg overflow-hidden shadow-2xl">
+                    <div className="absolute bottom-4 right-4 w-32 h-24 sm:w-48 sm:h-36 bg-[#111] border border-[#00f3ff]/30 rounded-lg overflow-hidden shadow-2xl">
                         <video
                             ref={localVideoRef}
                             autoPlay
@@ -337,23 +377,26 @@ const CommunicationHub: React.FC = () => {
                     </div>
 
                     {/* Controls Overlay */}
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-4 bg-black/50 backdrop-blur-md p-2 rounded-full border border-white/10">
-                        <button onClick={toggleVideo} className={`p-3 rounded-full transition-all ${isVideoEnabled ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500/20 text-red-500'}`}>
-                            {isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 sm:gap-4 bg-black/50 backdrop-blur-md p-2 rounded-full border border-white/10">
+                        <button onClick={toggleVideo} className={`p-2 sm:p-3 rounded-full transition-all ${isVideoEnabled ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500/20 text-red-500'}`}>
+                            {isVideoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
                         </button>
-                        <button onClick={toggleAudio} className={`p-3 rounded-full transition-all ${isAudioEnabled ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500/20 text-red-500'}`}>
-                            {isAudioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+                        <button onClick={toggleAudio} className={`p-2 sm:p-3 rounded-full transition-all ${isAudioEnabled ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500/20 text-red-500'}`}>
+                            {isAudioEnabled ? <Mic size={18} /> : <MicOff size={18} />}
+                        </button>
+                        <button onClick={flipCamera} className="p-2 sm:p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all">
+                            <SwitchCamera size={18} />
                         </button>
                         {callStatus === 'connected' && (
-                            <button onClick={endCall} className="p-3 rounded-full bg-red-500 hover:bg-red-600 text-white transition-all">
-                                <PhoneOff size={20} />
+                            <button onClick={endCall} className="p-2 sm:p-3 rounded-full bg-red-500 hover:bg-red-600 text-white transition-all">
+                                <PhoneOff size={18} />
                             </button>
                         )}
                     </div>
                 </div>
 
                 {/* Chat Area */}
-                <div className="h-[200px] bg-[#050510]/80 border border-[#333] rounded-xl flex flex-col">
+                <div className="h-[180px] sm:h-[200px] bg-[#050510]/80 border border-[#333] rounded-xl flex flex-col">
                     <div className="flex-1 p-4 overflow-y-auto space-y-2">
                         {chatHistory.map((msg) => (
                             <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>

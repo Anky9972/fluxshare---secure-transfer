@@ -1,174 +1,483 @@
-
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FluxShare 2099 // NETRUNNER</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
-    <style>
-      :root {
-        /* NEW PALETTE: Cyan & Purple */
-        --cyber-primary: #00f3ff; /* Cyan */
-        --cyber-secondary: #bc13fe; /* Purple */
-        --cyber-bg: #050510; /* Deep Blue/Black */
-        --cyber-text: #e0e0ff;
-      }
-      
-      body {
-        font-family: 'Rajdhani', sans-serif;
-        background-color: var(--cyber-bg);
-        color: var(--cyber-text);
-        overflow-x: hidden;
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FluxShare 2099 // NETRUNNER</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@400;500;700;900&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      /* NEW PALETTE: Cyan & Purple */
+      --cyber-primary: #00f3ff;
+      /* Cyan */
+      --cyber-secondary: #bc13fe;
+      /* Purple */
+      --cyber-bg: #050510;
+      /* Deep Blue/Black */
+      --cyber-text: #e0e0ff;
+    }
+
+    body {
+      font-family: 'Rajdhani', sans-serif;
+      background-color: var(--cyber-bg);
+      color: var(--cyber-text);
+      overflow-x: hidden;
+    }
+
+    /* HEADER / DISPLAY FONTS */
+    .font-display {
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .font-mono {
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    /* NOISE TEXTURE */
+    .noise-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 50;
+      opacity: 0.04;
+      background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuNjUiIG51bU9jdGF2ZXM9IjMiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjbm9pc2UpIiBvcGFjaXR5PSIxIi8+PC9zdmc+');
+    }
+
+    /* CUSTOM SCROLLBAR */
+    ::-webkit-scrollbar {
+      width: 6px;
+      background: var(--cyber-bg);
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #0a0a1a;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--cyber-secondary);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--cyber-primary);
+    }
+
+    /* 2099 BUTTON STYLES */
+    .cyber-button {
+      position: relative;
+      background: rgba(0, 243, 255, 0.05);
+      border: 1px solid var(--cyber-primary);
+      color: var(--cyber-primary);
+      text-transform: uppercase;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+    }
+
+    .cyber-button:hover {
+      background: var(--cyber-primary);
+      color: #000;
+      box-shadow: 0 0 25px rgba(0, 243, 255, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .cyber-button-secondary {
+      position: relative;
+      background: rgba(188, 19, 254, 0.05);
+      border: 1px solid var(--cyber-secondary);
+      color: var(--cyber-secondary);
+      text-transform: uppercase;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+    }
+
+    .cyber-button-secondary:hover {
+      background: var(--cyber-secondary);
+      color: #fff;
+      box-shadow: 0 0 25px rgba(188, 19, 254, 0.4);
+    }
+
+    /* GLITCH ANIMATIONS */
+    .glitch {
+      position: relative;
+    }
+
+    .glitch::before,
+    .glitch::after {
+      content: attr(data-text);
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .glitch::before {
+      left: 2px;
+      text-shadow: -1px 0 var(--cyber-secondary);
+      clip: rect(24px, 550px, 90px, 0);
+      animation: glitch-anim-2 3s infinite linear alternate-reverse;
+    }
+
+    .glitch::after {
+      left: -2px;
+      text-shadow: -1px 0 var(--cyber-primary);
+      clip: rect(85px, 550px, 140px, 0);
+      animation: glitch-anim 2.5s infinite linear alternate-reverse;
+    }
+
+    @keyframes glitch-anim {
+      0% {
+        clip: rect(20px, 9999px, 15px, 0);
       }
 
-      /* HEADER / DISPLAY FONTS */
-      .font-display {
-        font-family: 'Orbitron', sans-serif;
-      }
-      .font-mono {
-        font-family: 'Share Tech Mono', monospace;
+      20% {
+        clip: rect(60px, 9999px, 70px, 0);
       }
 
-      /* NOISE TEXTURE */
-      .noise-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        pointer-events: none;
-        z-index: 50;
-        opacity: 0.04;
-        background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuNjUiIG51bU9jdGF2ZXM9IjMiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjbm9pc2UpIiBvcGFjaXR5PSIxIi8+PC9zdmc+');
+      40% {
+        clip: rect(20px, 9999px, 15px, 0);
       }
 
-      /* CUSTOM SCROLLBAR */
-      ::-webkit-scrollbar {
-        width: 6px;
-        background: var(--cyber-bg);
-      }
-      ::-webkit-scrollbar-track {
-        background: #0a0a1a;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: var(--cyber-secondary);
-        border-radius: 3px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: var(--cyber-primary);
+      60% {
+        clip: rect(80px, 9999px, 90px, 0);
       }
 
-      /* 2099 BUTTON STYLES */
-      .cyber-button {
-        position: relative;
-        background: rgba(0, 243, 255, 0.05);
-        border: 1px solid var(--cyber-primary);
-        color: var(--cyber-primary);
-        text-transform: uppercase;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
-      }
-      
-      .cyber-button:hover {
-        background: var(--cyber-primary);
-        color: #000;
-        box-shadow: 0 0 25px rgba(0, 243, 255, 0.4);
-        transform: translateY(-2px);
+      80% {
+        clip: rect(10px, 9999px, 5px, 0);
       }
 
-      .cyber-button-secondary {
-        position: relative;
-        background: rgba(188, 19, 254, 0.05);
-        border: 1px solid var(--cyber-secondary);
-        color: var(--cyber-secondary);
-        text-transform: uppercase;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+      100% {
+        clip: rect(40px, 9999px, 60px, 0);
+      }
+    }
+
+    @keyframes glitch-anim-2 {
+      0% {
+        clip: rect(60px, 9999px, 70px, 0);
       }
 
-      .cyber-button-secondary:hover {
-        background: var(--cyber-secondary);
-        color: #fff;
-        box-shadow: 0 0 25px rgba(188, 19, 254, 0.4);
+      20% {
+        clip: rect(10px, 9999px, 5px, 0);
       }
 
-      /* GLITCH ANIMATIONS */
-      .glitch {
-        position: relative;
-      }
-      .glitch::before,
-      .glitch::after {
-        content: attr(data-text);
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-      }
-      .glitch::before {
-        left: 2px;
-        text-shadow: -1px 0 var(--cyber-secondary);
-        clip: rect(24px, 550px, 90px, 0);
-        animation: glitch-anim-2 3s infinite linear alternate-reverse;
-      }
-      .glitch::after {
-        left: -2px;
-        text-shadow: -1px 0 var(--cyber-primary);
-        clip: rect(85px, 550px, 140px, 0);
-        animation: glitch-anim 2.5s infinite linear alternate-reverse;
+      40% {
+        clip: rect(80px, 9999px, 90px, 0);
       }
 
-      @keyframes glitch-anim {
-        0% { clip: rect(20px, 9999px, 15px, 0); }
-        20% { clip: rect(60px, 9999px, 70px, 0); }
-        40% { clip: rect(20px, 9999px, 15px, 0); }
-        60% { clip: rect(80px, 9999px, 90px, 0); }
-        80% { clip: rect(10px, 9999px, 5px, 0); }
-        100% { clip: rect(40px, 9999px, 60px, 0); }
-      }
-      @keyframes glitch-anim-2 {
-        0% { clip: rect(60px, 9999px, 70px, 0); }
-        20% { clip: rect(10px, 9999px, 5px, 0); }
-        40% { clip: rect(80px, 9999px, 90px, 0); }
-        60% { clip: rect(20px, 9999px, 15px, 0); }
-        80% { clip: rect(40px, 9999px, 60px, 0); }
-        100% { clip: rect(10px, 9999px, 5px, 0); }
+      60% {
+        clip: rect(20px, 9999px, 15px, 0);
       }
 
-      .glass-panel {
-        background: rgba(10, 10, 25, 0.7);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+      80% {
+        clip: rect(40px, 9999px, 60px, 0);
       }
 
-      /* PHYSICS FLOAT */
-      @keyframes float {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
-        100% { transform: translateY(0px); }
+      100% {
+        clip: rect(10px, 9999px, 5px, 0);
       }
-      .animate-float {
-        animation: float 4s ease-in-out infinite;
-      }
-      
-      .animate-spin-slow {
-        animation: spin 3s linear infinite;
-      }
-      @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
+    }
+
+    .glass-panel {
+      background: rgba(10, 10, 25, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* PHYSICS FLOAT */
+    @keyframes float {
+      0% {
+        transform: translateY(0px);
       }
 
-      /* Ensure Hidden Elements are actually hidden */
-      .hidden {
-        display: none !important;
+      50% {
+        transform: translateY(-10px);
       }
 
-    </style>
-    <script type="importmap">
+      100% {
+        transform: translateY(0px);
+      }
+    }
+
+    .animate-float {
+      animation: float 4s ease-in-out infinite;
+    }
+
+    .animate-spin-slow {
+      animation: spin 3s linear infinite;
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* --- NEW CYBERPUNK ANIMATIONS --- */
+
+    /* SCANLINE EFFECT */
+    @keyframes scanline {
+      0% {
+        transform: translateY(-100%);
+      }
+
+      100% {
+        transform: translateY(100%);
+      }
+    }
+
+    .animate-scanline {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .animate-scanline::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom, transparent 0%, rgba(0, 243, 255, 0.2) 50%, transparent 100%);
+      animation: scanline 2s linear infinite;
+      pointer-events: none;
+    }
+
+    /* TEXT SHIMMER */
+    @keyframes shimmer {
+      0% {
+        background-position: -200% center;
+      }
+
+      100% {
+        background-position: 200% center;
+      }
+    }
+
+    .animate-text-shimmer {
+      background: linear-gradient(to right,
+          #ffffff 20%,
+          #00f3ff 40%,
+          #00f3ff 60%,
+          #ffffff 80%);
+      background-size: 200% auto;
+      color: #000;
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: shimmer 3s linear infinite;
+    }
+
+    /* CYBER CLICK */
+    @keyframes cyber-click {
+      0% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(0.95);
+        filter: brightness(1.5);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    .active\:animate-cyber-click:active {
+      animation: cyber-click 0.1s ease-in-out;
+    }
+
+    /* PULSE GLOW */
+    @keyframes pulse-glow {
+
+      0%,
+      100% {
+        box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+      }
+
+      50% {
+        box-shadow: 0 0 25px rgba(0, 243, 255, 0.6);
+      }
+    }
+
+    .animate-pulse-glow {
+      animation: pulse-glow 2s infinite;
+    }
+
+    /* MATRIX BG FADE */
+    @keyframes matrix-fade {
+
+      0%,
+      100% {
+        opacity: 0.05;
+      }
+
+      50% {
+        opacity: 0.15;
+      }
+    }
+
+    .animate-matrix-fade {
+      animation: matrix-fade 4s ease-in-out infinite;
+    }
+
+    /* LIQUID PLASMA EFFECT */
+    @keyframes plasma-flow {
+      0% {
+        background-position: 0% 50%;
+      }
+
+      50% {
+        background-position: 100% 50%;
+      }
+
+      100% {
+        background-position: 0% 50%;
+      }
+    }
+
+    .animate-plasma-flow {
+      background: linear-gradient(270deg,
+          #ffffff,
+          #00f3ff,
+          #bc13fe,
+          #00f3ff,
+          #ffffff);
+      background-size: 300% 300%;
+      color: transparent;
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: plasma-flow 6s ease infinite;
+      filter: drop-shadow(0 0 10px rgba(0, 243, 255, 0.3));
+    }
+
+    /* CYBERPUNK GLITCH EFFECT */
+    .glitch {
+      position: relative;
+      color: white;
+    }
+
+    .glitch::before,
+    .glitch::after {
+      content: attr(data-text);
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .glitch::before {
+      left: 2px;
+      text-shadow: -1px 0 #00f3ff;
+      clip: rect(44px, 450px, 56px, 0);
+      animation: glitch-anim-1 5s infinite linear alternate-reverse, glitch-colors 3s infinite linear;
+    }
+
+    .glitch::after {
+      left: -2px;
+      text-shadow: -1px 0 #bc13fe;
+      clip: rect(44px, 450px, 56px, 0);
+      animation: glitch-anim-2 5s infinite linear alternate-reverse, glitch-colors 2.5s infinite linear reverse;
+    }
+
+    @keyframes glitch-colors {
+      0% {
+        text-shadow: -1px 0 #00f3ff;
+      }
+
+      20% {
+        text-shadow: -1px 0 #bc13fe;
+      }
+
+      40% {
+        text-shadow: -1px 0 #00ff9d;
+      }
+
+      60% {
+        text-shadow: -1px 0 #ff0055;
+      }
+
+      80% {
+        text-shadow: -1px 0 #f3ff00;
+      }
+
+      100% {
+        text-shadow: -1px 0 #00f3ff;
+      }
+    }
+
+    @keyframes glitch-anim-1 {
+      0% {
+        clip: rect(20px, 9999px, 15px, 0);
+      }
+
+      20% {
+        clip: rect(60px, 9999px, 70px, 0);
+      }
+
+      40% {
+        clip: rect(20px, 9999px, 15px, 0);
+      }
+
+      60% {
+        clip: rect(80px, 9999px, 5px, 0);
+      }
+
+      80% {
+        clip: rect(10px, 9999px, 95px, 0);
+      }
+
+      100% {
+        clip: rect(40px, 9999px, 60px, 0);
+      }
+    }
+
+    @keyframes glitch-anim-2 {
+      0% {
+        clip: rect(15px, 9999px, 80px, 0);
+      }
+
+      20% {
+        clip: rect(90px, 9999px, 10px, 0);
+      }
+
+      40% {
+        clip: rect(15px, 9999px, 80px, 0);
+      }
+
+      60% {
+        clip: rect(30px, 9999px, 40px, 0);
+      }
+
+      80% {
+        clip: rect(75px, 9999px, 25px, 0);
+      }
+
+      100% {
+        clip: rect(10px, 9999px, 90px, 0);
+      }
+    }
+
+    /* Ensure Hidden Elements are actually hidden */
+    .hidden {
+      display: none !important;
+    }
+  </style>
+  <script type="importmap">
     {
       "imports": {
         "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
@@ -181,8 +490,10 @@
     </script>
   <link rel="stylesheet" href="/index.css">
 </head>
-  <body>
-    <div id="root"></div>
+
+<body>
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>

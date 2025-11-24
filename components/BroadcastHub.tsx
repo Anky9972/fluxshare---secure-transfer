@@ -44,20 +44,22 @@ const BroadcastHub: React.FC = () => {
 
                 // Add optional self-hosted config
                 // @ts-ignore
-                const envHost = import.meta.env.VITE_PEER_HOST;
-                if (envHost && envHost.trim() !== '') {
-                    // @ts-ignore
-                    peerConfig.host = envHost;
-                    // @ts-ignore
-                    peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
-                    // @ts-ignore
-                    peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
-                }
+                const envHost = import.meta.env.VITE_BROADCAST_PEER_HOST || 'localhost';
+                // @ts-ignore
+                const envPort = Number(import.meta.env.VITE_BROADCAST_PEER_PORT) || 9000;
+
+                // @ts-ignore
+                peerConfig.host = envHost;
+                peerConfig.port = envPort;
+                // @ts-ignore
+                peerConfig.path = import.meta.env.VITE_BROADCAST_PEER_PATH || '/';
+
                 // Set secure flag based on environment
-                if (import.meta.env.VITE_ENV === 'development') {
-                    peerConfig.secure = false;
-                } else {
+                // @ts-ignore
+                if (import.meta.env.VITE_ENV === 'production' || envHost !== 'localhost') {
                     peerConfig.secure = true;
+                } else {
+                    peerConfig.secure = false;
                 }
 
                 const peer = new Peer(id, peerConfig);
@@ -107,13 +109,13 @@ const BroadcastHub: React.FC = () => {
         try {
             // Construct API URL based on env
             // @ts-ignore
-            const host = import.meta.env.VITE_PEER_HOST || '0.peerjs.com';
+            const host = import.meta.env.VITE_BROADCAST_PEER_HOST || 'localhost';
             // @ts-ignore
-            const port = import.meta.env.VITE_PEER_PORT || 443;
+            const port = import.meta.env.VITE_BROADCAST_PEER_PORT || 9000;
             // @ts-ignore
-            const path = import.meta.env.VITE_PEER_PATH || '/';
+            const path = import.meta.env.VITE_BROADCAST_PEER_PATH || '/';
             // @ts-ignore
-            const protocol = import.meta.env.VITE_ENV === 'development' ? 'http' : 'https';
+            const protocol = import.meta.env.VITE_ENV === 'production' ? 'https' : 'http';
 
             // Clean path to ensure it doesn't have double slashes if not needed, 
             // but PeerJS server usually expects /peerjs/peers or similar depending on mount
@@ -136,7 +138,9 @@ const BroadcastHub: React.FC = () => {
 
         } catch (err) {
             addLog(`Scan failed: ${(err as Error).message}`);
-            addLog("Note: Peer listing may be disabled on public servers.");
+            addLog("ERROR: Could not list peers.");
+            addLog("TIP: Ensure local peer server is running:");
+            addLog("Run 'npm run peer-server' in a new terminal.");
         } finally {
             setIsScanning(false);
         }
@@ -188,7 +192,7 @@ const BroadcastHub: React.FC = () => {
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[70vh]">
+        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 min-h-[60vh] lg:h-[70vh] overflow-y-auto">
             {/* Left Panel: Network Status */}
             <div className="lg:col-span-1 flex flex-col gap-4">
                 <div className="bg-[#050510]/80 border border-[#00f3ff]/30 p-6 rounded-xl backdrop-blur-md">
@@ -209,7 +213,7 @@ const BroadcastHub: React.FC = () => {
                     </button>
                 </div>
 
-                <div className="bg-[#050510]/80 border border-[#333] p-6 rounded-xl backdrop-blur-md flex-1 overflow-hidden flex flex-col">
+                <div className="bg-[#050510]/80 border border-[#333] p-6 rounded-xl backdrop-blur-md flex-1 overflow-hidden flex flex-col max-h-[300px] lg:max-h-none">
                     <h3 className="text-gray-400 font-display font-bold mb-4 flex items-center gap-2 text-xs tracking-widest">
                         <Users size={14} /> DETECTED_PEERS
                     </h3>
@@ -231,7 +235,7 @@ const BroadcastHub: React.FC = () => {
             {/* Right Panel: Broadcast Console */}
             <div className="lg:col-span-2 flex flex-col gap-4">
                 {/* Logs */}
-                <div className="flex-1 bg-black/80 border border-[#333] rounded-xl p-4 font-mono text-xs overflow-y-auto relative">
+                <div className="min-h-[300px] lg:flex-1 bg-black/80 border border-[#333] rounded-xl p-4 font-mono text-xs overflow-y-auto relative">
                     <div className="absolute top-0 right-0 p-2 text-[#bc13fe] text-[10px] tracking-widest opacity-50">
                         BROADCAST_LOGS
                     </div>

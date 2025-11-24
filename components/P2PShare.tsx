@@ -1,8 +1,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, X, Download, CheckCircle2, Loader2, Wifi, File as FileIcon, Send, Radio, Copy, ShieldCheck, RefreshCw, Search, ArrowRight, MessageSquare, Terminal, Bot } from 'lucide-react';
+import { UploadCloud, X, Download, CheckCircle2, Loader2, Wifi, File as FileIcon, Send, Radio, Copy, ShieldCheck, RefreshCw, Search, ArrowRight, MessageSquare, Terminal, Bot, Eye } from 'lucide-react';
 import { FileTransfer, ChatMessage } from '../types';
 import { generateQuickReplies } from '../services/geminiService';
+import FilePreviewModal from './FilePreviewModal';
 
 declare const Peer: any;
 const CHUNK_SIZE = 16 * 1024;
@@ -38,6 +39,8 @@ const P2PShare: React.FC = () => {
     const [transferProgress, setTransferProgress] = useState(0);
     const [receivedFileUrl, setReceivedFileUrl] = useState<string | null>(null);
     const [receivedMeta, setReceivedMeta] = useState<{ name: string, size: number, mime: string } | null>(null);
+    const [showPreview, setShowPreview] = useState(false);
+    const [previewFile, setPreviewFile] = useState<File | null>(null);
 
     const peerRef = useRef<any>(null);
     const connRef = useRef<any>(null);
@@ -284,24 +287,26 @@ const P2PShare: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fadeIn h-[500px]">
                 <button
                     onClick={() => setMode('send')}
-                    className="group relative bg-[#00f3ff]/5 border border-[#00f3ff]/30 hover:border-[#00f3ff] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg"
+                    className="group relative bg-[#00f3ff]/5 border border-[#00f3ff]/30 hover:border-[#00f3ff] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg active:scale-95"
                 >
                     <div className="absolute inset-0 bg-gradient-to-br from-[#00f3ff]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-scanline"></div>
                     <div className="relative z-10 flex flex-col items-center">
-                        <Send size={64} className="text-[#00f3ff] mb-6 group-hover:scale-110 transition-transform duration-500" />
-                        <h3 className="text-4xl font-display font-bold text-white tracking-tighter">TRANSMITTER</h3>
+                        <Send size={64} className="text-[#00f3ff] mb-6 group-hover:scale-110 transition-transform duration-500 group-hover:animate-pulse" />
+                        <h3 className="text-4xl font-display font-bold text-white tracking-tighter group-hover:text-[#00f3ff] transition-colors">TRANSMITTER</h3>
                         <p className="font-mono text-[#00f3ff] text-xs mt-2 tracking-[0.3em]">INIT_SOURCE_PROTOCOL</p>
                     </div>
                 </button>
 
                 <button
                     onClick={() => setMode('receive')}
-                    className="group relative bg-[#bc13fe]/5 border border-[#bc13fe]/30 hover:border-[#bc13fe] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg"
+                    className="group relative bg-[#bc13fe]/5 border border-[#bc13fe]/30 hover:border-[#bc13fe] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg active:scale-95"
                 >
                     <div className="absolute inset-0 bg-gradient-to-bl from-[#bc13fe]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-scanline"></div>
                     <div className="relative z-10 flex flex-col items-center">
-                        <Download size={64} className="text-[#bc13fe] mb-6 group-hover:scale-110 transition-transform duration-500" />
-                        <h3 className="text-4xl font-display font-bold text-white tracking-tighter">RECEIVER</h3>
+                        <Download size={64} className="text-[#bc13fe] mb-6 group-hover:scale-110 transition-transform duration-500 group-hover:animate-pulse" />
+                        <h3 className="text-4xl font-display font-bold text-white tracking-tighter group-hover:text-[#bc13fe] transition-colors">RECEIVER</h3>
                         <p className="font-mono text-[#bc13fe] text-xs mt-2 tracking-[0.3em]">INIT_TARGET_PROTOCOL</p>
                     </div>
                 </button>
@@ -499,8 +504,11 @@ const P2PShare: React.FC = () => {
 
                                             {transferProgress > 0 ? (
                                                 <div>
-                                                    <div className="h-2 bg-[#222] w-full mb-3 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-[#00f3ff] transition-all duration-300" style={{ width: `${transferProgress}%` }}></div>
+                                                    <div className="h-2 bg-[#222] w-full mb-3 rounded-full overflow-hidden relative">
+                                                        <div className="absolute inset-0 bg-[#00f3ff]/20 animate-pulse"></div>
+                                                        <div className="h-full bg-[#00f3ff] transition-all duration-300 relative overflow-hidden" style={{ width: `${transferProgress}%` }}>
+                                                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-[shimmer_1s_infinite]"></div>
+                                                        </div>
                                                     </div>
                                                     <div className="flex justify-between font-mono text-[10px] text-[#00f3ff]">
                                                         <span>TRANSMITTING...</span>
@@ -510,7 +518,7 @@ const P2PShare: React.FC = () => {
                                             ) : (
                                                 <button
                                                     onClick={sendFile}
-                                                    className="w-full py-3 bg-[#00f3ff] text-black font-bold font-display uppercase tracking-widest hover:bg-white transition-colors rounded-lg shadow-lg shadow-[#00f3ff]/20"
+                                                    className="w-full py-3 bg-[#00f3ff] text-black font-bold font-display uppercase tracking-widest hover:bg-white transition-colors rounded-lg shadow-lg shadow-[#00f3ff]/20 animate-pulse-glow active:scale-95"
                                                 >
                                                     INITIATE UPLOAD
                                                 </button>
@@ -522,11 +530,12 @@ const P2PShare: React.FC = () => {
                                 // RECEIVE UI
                                 <div className="text-center animate-fadeIn">
                                     {!receivedMeta ? (
-                                        <div className="animate-pulse opacity-50 flex flex-col items-center">
-                                            <div className="w-24 h-24 rounded-full border-4 border-[#bc13fe]/30 flex items-center justify-center mb-6">
+                                        <div className="animate-pulse opacity-50 flex flex-col items-center relative">
+                                            <div className="absolute inset-0 animate-scanline opacity-30 pointer-events-none"></div>
+                                            <div className="w-24 h-24 rounded-full border-4 border-[#bc13fe]/30 flex items-center justify-center mb-6 animate-[spin_4s_linear_infinite]">
                                                 <Radio size={48} className="text-[#bc13fe]" />
                                             </div>
-                                            <h3 className="font-display text-2xl text-white tracking-widest">AWAITING SIGNAL</h3>
+                                            <h3 className="font-display text-2xl text-white tracking-widest animate-text-shimmer">AWAITING SIGNAL</h3>
                                             <p className="font-mono text-xs text-[#bc13fe] mt-2">CHANNEL OPEN</p>
                                         </div>
                                     ) : (
@@ -537,14 +546,40 @@ const P2PShare: React.FC = () => {
                                                 <span className="text-sm font-mono">{receivedMeta.name}</span>
                                             </div>
 
-                                            <div className="h-2 bg-[#222] w-full mb-4 rounded-full overflow-hidden">
-                                                <div className="h-full bg-[#bc13fe] transition-all duration-300" style={{ width: `${transferProgress}%` }}></div>
+                                            <div className="h-2 bg-[#222] w-full mb-4 rounded-full overflow-hidden relative">
+                                                <div className="absolute inset-0 bg-[#bc13fe]/20 animate-pulse"></div>
+                                                <div className="h-full bg-[#bc13fe] transition-all duration-300 relative overflow-hidden" style={{ width: `${transferProgress}%` }}>
+                                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-[shimmer_1s_infinite]"></div>
+                                                </div>
                                             </div>
 
                                             {receivedFileUrl ? (
-                                                <a href={receivedFileUrl} download={receivedMeta.name} className="block w-full py-3 bg-[#bc13fe] text-white font-bold font-display uppercase tracking-widest hover:bg-white hover:text-black transition-colors rounded-lg">
-                                                    SAVE TO DISK
-                                                </a>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            // Create File object from blob URL for preview
+                                                            fetch(receivedFileUrl)
+                                                                .then(res => res.blob())
+                                                                .then(blob => {
+                                                                    const file = new File([blob], receivedMeta.name, { type: receivedMeta.mime });
+                                                                    setPreviewFile(file);
+                                                                    setShowPreview(true);
+                                                                });
+                                                        }}
+                                                        className="flex-1 py-3 bg-[#00f3ff]/10 border border-[#00f3ff] text-[#00f3ff] font-bold font-display uppercase tracking-widest hover:bg-[#00f3ff] hover:text-black transition-colors rounded-lg flex items-center justify-center gap-2"
+                                                    >
+                                                        <Eye size={18} />
+                                                        PREVIEW
+                                                    </button>
+                                                    <a
+                                                        href={receivedFileUrl}
+                                                        download={receivedMeta.name}
+                                                        className="flex-1 py-3 bg-[#bc13fe] text-white font-bold font-display uppercase tracking-widest hover:bg-white hover:text-black transition-colors rounded-lg flex items-center justify-center gap-2"
+                                                    >
+                                                        <Download size={18} />
+                                                        SAVE
+                                                    </a>
+                                                </div>
                                             ) : (
                                                 <div className="text-[#bc13fe] font-mono text-xs animate-pulse">RECEIVING PACKETS...</div>
                                             )}
@@ -562,6 +597,14 @@ const P2PShare: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* File Preview Modal */}
+            <FilePreviewModal
+                isOpen={showPreview}
+                onClose={() => setShowPreview(false)}
+                file={previewFile}
+                fileUrl={receivedFileUrl || undefined}
+            />
         </div>
     );
 };
