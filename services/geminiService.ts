@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const apiKey = process.env.API_KEY || '';
+// @ts-ignore
+const apiKey = localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '';
 // Ideally, we check if key exists, but for this demo we assume environment is set up.
 // If not, we will fallback to manual generation or mocked data if the call fails.
 
@@ -8,8 +9,8 @@ const ai = new GoogleGenAI({ apiKey });
 
 export const generateSmartCredentials = async (): Promise<{ username: string; password: string; region: string } | null> => {
   try {
-    const modelId = 'gemini-2.5-flash'; 
-    
+    const modelId = 'gemini-2.5-flash';
+
     const response = await ai.models.generateContent({
       model: modelId,
       contents: "Generate a single fun, memorable SFTP username (e.g., combining an adjective and an animal), a strong secure password, and a fictional cloud region name.",
@@ -29,7 +30,7 @@ export const generateSmartCredentials = async (): Promise<{ username: string; pa
 
     const jsonText = response.text;
     if (!jsonText) return null;
-    
+
     return JSON.parse(jsonText);
   } catch (error) {
     console.error("Gemini generation failed", error);
@@ -70,7 +71,7 @@ export const generateQuickReplies = async (context: string): Promise<string[]> =
 
     const jsonText = response.text;
     if (!jsonText) return ["Ack.", "Link stable.", "Standby."];
-    
+
     const parsed = JSON.parse(jsonText);
     return parsed.replies || ["Ack.", "Link stable.", "Standby."];
   } catch (error) {
