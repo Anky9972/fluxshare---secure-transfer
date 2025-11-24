@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Radio, Users, Send, RefreshCw, Activity, Shield, Globe } from 'lucide-react';
+import { Radio, Users, Send, RefreshCw, Globe, Settings, X, Save, AlertTriangle } from 'lucide-react';
 
 declare const Peer: any;
 
@@ -14,6 +14,20 @@ const generateUUID = () => {
     });
 };
 
+interface PeerSettings {
+    host: string;
+    port: number;
+    path: string;
+    secure: boolean;
+}
+
+const DEFAULT_SETTINGS: PeerSettings = {
+    host: 'localhost',
+    port: 9000,
+    path: '/',
+    secure: false
+};
+
 const BroadcastHub: React.FC = () => {
     const [myId, setMyId] = useState<string>('');
     const [activePeers, setActivePeers] = useState<string[]>([]);
@@ -22,10 +36,56 @@ const BroadcastHub: React.FC = () => {
     const [isScanning, setIsScanning] = useState(false);
     const [isBroadcasting, setIsBroadcasting] = useState(false);
 
+    // Settings State
+    const [showSettings, setShowSettings] = useState(false);
+    const [settings, setSettings] = useState<PeerSettings>(DEFAULT_SETTINGS);
+    const [tempSettings, setTempSettings] = useState<PeerSettings>(DEFAULT_SETTINGS);
+
     const peerRef = useRef<any>(null);
 
+    // Load settings from localStorage on mount
+    useEffect(() => {
+        const savedSettings = localStorage.getItem('fluxshare_peer_settings');
+        if (savedSettings) {
+            try {
+                const parsed = JSON.parse(savedSettings);
+                setSettings(parsed);
+                setTempSettings(parsed);
+            } catch (e) {
+                console.error("Failed to parse settings", e);
+            }
+        } else {
+            // Fallback to env vars if no local storage
+            // @ts-ignore
+            const envHost = import.meta.env.VITE_BROADCAST_PEER_HOST;
+            // @ts-ignore
+            const envPort = import.meta.env.VITE_BROADCAST_PEER_PORT;
+            // @ts-ignore
+            const envPath = import.meta.env.VITE_BROADCAST_PEER_PATH;
+
+            if (envHost) {
+                const envSettings = {
+                    host: envHost,
+                    port: Number(envPort) || 9000,
+                    path: envPath || '/',
+                    // @ts-ignore
+                    secure: import.meta.env.VITE_ENV === 'production' || envHost !== 'localhost'
+                };
+                setSettings(envSettings);
+                setTempSettings(envSettings);
+            }
+        }
+    }, []);
+
+    // Initialize Peer when settings change
     useEffect(() => {
         const initPeer = async () => {
+            // Cleanup previous instance
+            if (peerRef.current) {
+                peerRef.current.destroy();
+                peerRef.current = null;
+            }
+
             try {
                 const id = `FLUX-CAST-${Math.floor(Math.random() * 9000) + 1000}`;
 
@@ -39,34 +99,19 @@ const BroadcastHub: React.FC = () => {
                     debug: 2,
                     config: {
                         iceServers: iceServers
-                    }
+                    },
+                    host: settings.host,
+                    port: settings.port,
+                    path: settings.path,
+                    secure: settings.secure
                 };
-
-                // Add optional self-hosted config
-                // @ts-ignore
-                const envHost = import.meta.env.VITE_BROADCAST_PEER_HOST || 'localhost';
-                // @ts-ignore
-                const envPort = Number(import.meta.env.VITE_BROADCAST_PEER_PORT) || 9000;
-
-                // @ts-ignore
-                peerConfig.host = envHost;
-                peerConfig.port = envPort;
-                // @ts-ignore
-                peerConfig.path = import.meta.env.VITE_BROADCAST_PEER_PATH || '/';
-
-                // Set secure flag based on environment
-                // @ts-ignore
-                if (import.meta.env.VITE_ENV === 'production' || envHost !== 'localhost') {
-                    peerConfig.secure = true;
-                } else {
-                    peerConfig.secure = false;
-                }
 
                 const peer = new Peer(id, peerConfig);
 
                 peer.on('open', (id: string) => {
                     setMyId(id);
                     addLog(`Broadcast Node Online: ${id}`);
+                    addLog(`Connected to: ${settings.host}:${settings.port}`);
                     fetchActivePeers();
                 });
 
@@ -80,15 +125,21 @@ const BroadcastHub: React.FC = () => {
 
                 peer.on('error', (err: any) => {
                     addLog(`Error: ${err.type}`);
+                    if (err.type === 'network' || err.type === 'peer-unavailable') {
+                        addLog(`Could not connect to server at ${settings.host}:${settings.port}`);
+                    }
                 });
 
                 peerRef.current = peer;
 
             } catch (err) {
                 console.error("Init failed", err);
+                addLog("Failed to initialize peer connection.");
             }
         };
 
+        // Only init if we have settings loaded (useEffect runs once on mount, but settings might be default)
+        // We want to run this whenever settings change actually.
         initPeer();
 
         return () => {
@@ -96,7 +147,7 @@ const BroadcastHub: React.FC = () => {
                 peerRef.current.destroy();
             }
         };
-    }, []);
+    }, [settings]);
 
     const addLog = (msg: string) => {
         setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev.slice(0, 50)]);
@@ -107,15 +158,8 @@ const BroadcastHub: React.FC = () => {
         addLog("Scanning network for active nodes...");
 
         try {
-            // Construct API URL based on env
-            // @ts-ignore
-            const host = import.meta.env.VITE_BROADCAST_PEER_HOST || 'localhost';
-            // @ts-ignore
-            const port = import.meta.env.VITE_BROADCAST_PEER_PORT || 9000;
-            // @ts-ignore
-            const path = import.meta.env.VITE_BROADCAST_PEER_PATH || '/';
-            // @ts-ignore
-            const protocol = import.meta.env.VITE_ENV === 'production' ? 'https' : 'http';
+            const { host, port, path, secure } = settings;
+            const protocol = secure ? 'https' : 'http';
 
             // Clean path to ensure it doesn't have double slashes if not needed, 
             // but PeerJS server usually expects /peerjs/peers or similar depending on mount
@@ -139,8 +183,13 @@ const BroadcastHub: React.FC = () => {
         } catch (err) {
             addLog(`Scan failed: ${(err as Error).message}`);
             addLog("ERROR: Could not list peers.");
-            addLog("TIP: Ensure local peer server is running:");
-            addLog("Run 'npm run peer-server' in a new terminal.");
+
+            if (settings.host === 'localhost' && window.location.hostname !== 'localhost') {
+                addLog("⚠️ WARNING: You are on a hosted site trying to connect to localhost.");
+                addLog("Please configure a public PeerJS server in Settings.");
+            } else {
+                addLog("TIP: Ensure the PeerJS server is running and supports peer listing.");
+            }
         } finally {
             setIsScanning(false);
         }
@@ -191,11 +240,106 @@ const BroadcastHub: React.FC = () => {
         setIsBroadcasting(false);
     };
 
+    const saveSettings = () => {
+        setSettings(tempSettings);
+        localStorage.setItem('fluxshare_peer_settings', JSON.stringify(tempSettings));
+        setShowSettings(false);
+        addLog("Settings saved. Reconnecting...");
+    };
+
     return (
-        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 min-h-[60vh] lg:h-[70vh] overflow-y-auto">
+        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 min-h-[60vh] lg:h-[70vh] overflow-y-auto relative">
+
+            {/* Settings Modal */}
+            {showSettings && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-[#050510] border border-[#00f3ff] p-6 rounded-xl w-full max-w-md shadow-[0_0_30px_rgba(0,243,255,0.2)]">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-[#00f3ff] font-display font-bold text-xl flex items-center gap-2">
+                                <Settings size={20} /> SERVER_CONFIG
+                            </h3>
+                            <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-white">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-mono text-gray-400 mb-1">HOST_ADDRESS</label>
+                                <input
+                                    type="text"
+                                    value={tempSettings.host}
+                                    onChange={(e) => setTempSettings({ ...tempSettings, host: e.target.value })}
+                                    className="w-full bg-black/50 border border-[#333] rounded px-3 py-2 text-white font-mono focus:border-[#00f3ff] outline-none"
+                                    placeholder="e.g. localhost or my-peer-server.com"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-mono text-gray-400 mb-1">PORT</label>
+                                    <input
+                                        type="number"
+                                        value={tempSettings.port}
+                                        onChange={(e) => setTempSettings({ ...tempSettings, port: Number(e.target.value) })}
+                                        className="w-full bg-black/50 border border-[#333] rounded px-3 py-2 text-white font-mono focus:border-[#00f3ff] outline-none"
+                                        placeholder="9000"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-mono text-gray-400 mb-1">PATH</label>
+                                    <input
+                                        type="text"
+                                        value={tempSettings.path}
+                                        onChange={(e) => setTempSettings({ ...tempSettings, path: e.target.value })}
+                                        className="w-full bg-black/50 border border-[#333] rounded px-3 py-2 text-white font-mono focus:border-[#00f3ff] outline-none"
+                                        placeholder="/"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="secure"
+                                    checked={tempSettings.secure}
+                                    onChange={(e) => setTempSettings({ ...tempSettings, secure: e.target.checked })}
+                                    className="w-4 h-4 accent-[#00f3ff]"
+                                />
+                                <label htmlFor="secure" className="text-sm text-gray-300 font-mono">ENABLE_SSL (HTTPS/WSS)</label>
+                            </div>
+
+                            <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded text-xs text-yellow-200 flex gap-2 items-start mt-4">
+                                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                                <div>
+                                    For hosted sites, you MUST use a public PeerJS server (not localhost) that supports peer listing.
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={saveSettings}
+                                className="w-full bg-[#00f3ff] text-black font-bold py-3 rounded mt-4 hover:bg-[#00c2cc] transition-all flex items-center justify-center gap-2"
+                            >
+                                <Save size={18} /> SAVE_CONFIGURATION
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Left Panel: Network Status */}
             <div className="lg:col-span-1 flex flex-col gap-4">
-                <div className="bg-[#050510]/80 border border-[#00f3ff]/30 p-6 rounded-xl backdrop-blur-md">
+                <div className="bg-[#050510]/80 border border-[#00f3ff]/30 p-6 rounded-xl backdrop-blur-md relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4">
+                        <button
+                            onClick={() => setShowSettings(true)}
+                            className="text-[#00f3ff]/50 hover:text-[#00f3ff] transition-colors"
+                            title="Server Settings"
+                        >
+                            <Settings size={18} />
+                        </button>
+                    </div>
+
                     <h3 className="text-[#00f3ff] font-display font-bold mb-2 flex items-center gap-2">
                         <Globe size={18} /> NETWORK_STATUS
                     </h3>
@@ -203,6 +347,11 @@ const BroadcastHub: React.FC = () => {
                         <span className="text-gray-400 font-mono text-xs">ACTIVE_NODES</span>
                         <span className="text-[#00f3ff] font-mono font-bold text-xl">{activePeers.length}</span>
                     </div>
+
+                    <div className="mb-4 text-xs font-mono text-gray-500 truncate">
+                        SERVER: {settings.host}:{settings.port}
+                    </div>
+
                     <button
                         onClick={fetchActivePeers}
                         disabled={isScanning}
