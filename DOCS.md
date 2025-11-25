@@ -1,5 +1,112 @@
 # FluxShare Documentation
 
+## Environment Configuration
+
+FluxShare uses environment variables to configure various features. Copy `.env.example` to `.env` and configure as needed:
+
+```bash
+cp .env.example .env
+```
+
+### Environment Variables
+
+#### AI Features (Optional)
+- `GEMINI_API_KEY`: Your Google Gemini API key for AI-powered quick replies in chat
+  - Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+  - This is optional - chat works without AI features
+
+#### P2P Configuration
+- `VITE_ICE_SERVERS`: Comma-separated list of STUN/TURN servers for WebRTC connections
+  - Default: `stun:stun.l.google.com:19302,stun:global.stun.twilio.com:3478`
+  - These help establish peer-to-peer connections through NAT/firewalls
+
+#### P2P Share PeerJS Server (Optional)
+- `VITE_PEER_HOST`: Custom PeerJS server hostname (leave empty for default cloud server)
+- `VITE_PEER_PORT`: Custom PeerJS server port (default: 443)
+- `VITE_PEER_PATH`: Custom PeerJS server path (default: `/`)
+- `VITE_ENV`: Environment type (`development` or `production`)
+
+#### Broadcast Hub PeerJS Server (Required for Broadcast Feature)
+- `VITE_BROADCAST_PEER_HOST`: PeerJS server hostname for broadcast functionality
+  - **Local development**: Can use `localhost` if running a local PeerJS server
+  - **Production/Netlify**: MUST use a public server (e.g., `0.peerjs.com`)
+- `VITE_BROADCAST_PEER_PORT`: PeerJS server port (default: 443 for public servers)
+- `VITE_BROADCAST_PEER_PATH`: PeerJS server path (default: `/`)
+
+### PeerJS Server Options
+
+The Broadcast Hub feature requires a PeerJS server that supports **peer listing** (the `/peerjs/peers` endpoint). This is required for the network scanning feature to discover other connected peers.
+
+> [!IMPORTANT]
+> **The free public PeerJS server at `0.peerjs.com` does NOT support peer listing** and will return 404 errors when trying to scan for peers. You **MUST** deploy your own PeerJS server for the Broadcast feature to work.
+
+#### Deploy Your Own PeerJS Server (Required)
+
+I've created a ready-to-deploy PeerJS server in the `peer-server-deploy/` directory with peer listing enabled.
+
+**Quick Deploy to Railway (Free):**
+
+1. Go to [Railway](https://railway.app) and sign in with GitHub
+2. Click **New Project** → **Deploy from GitHub repo**
+3. Select your FluxShare repository
+4. Set root directory to `peer-server-deploy`
+5. Railway will auto-detect and deploy
+6. Copy your deployment URL (e.g., `your-app.railway.app`)
+
+**Alternative Platforms:**
+- [Render](https://render.com) - Free tier available
+- [Heroku](https://heroku.com) - Paid tiers
+- Any VPS with Node.js support
+
+**After Deployment:**
+
+Update your `.env` file:
+```env
+VITE_BROADCAST_PEER_HOST=your-app.railway.app
+VITE_BROADCAST_PEER_PORT=443
+VITE_BROADCAST_PEER_PATH=/
+```
+
+For detailed deployment instructions, see [peer-server-deploy/README.md](file:///c:/Users/asus/Downloads/fluxshare---secure-transfer/peer-server-deploy/README.md)
+
+
+For better reliability and control, deploy your own PeerJS server:
+
+1. **Quick Deploy to Railway/Render/Heroku**:
+   ```bash
+   # Navigate to the deployment directory
+   cd peer-server-deploy
+   
+   # See README.md for detailed deployment instructions
+   ```
+
+2. **Update your `.env`**:
+   ```env
+   VITE_BROADCAST_PEER_HOST=your-app.railway.app
+   VITE_BROADCAST_PEER_PORT=443
+   VITE_BROADCAST_PEER_PATH=/
+   ```
+
+### Netlify Deployment Configuration
+
+When deploying to Netlify, you **must** configure environment variables in the Netlify dashboard:
+
+1. Go to your site in Netlify Dashboard
+2. Navigate to: **Site settings → Environment variables**
+3. Add the following variables (after deploying your PeerJS server):
+
+```
+VITE_BROADCAST_PEER_HOST=your-app.railway.app
+VITE_BROADCAST_PEER_PORT=443
+VITE_BROADCAST_PEER_PATH=/
+VITE_ENV=production
+GEMINI_API_KEY=your_api_key_here (if using AI features)
+```
+
+4. Redeploy your site for changes to take effect
+
+**Important**: Never use `localhost` as the host for production deployments - it will only work on your local machine!
+
 ## 📋 Table of Contents
 - [Overview](#overview)
 - [Features](#features)
@@ -54,17 +161,17 @@ npm install
 npm run dev
 ```
 
-### For Broadcast Feature
+### For Local Development with Broadcast
+If you want to run a local PeerJS server for testing broadcast features:
 ```bash
 npm run peer-server
 ```
 
-### Environment Setup
-Create `.env` file:
+Then update your `.env`:
 ```
-VITE_ICE_SERVERS=stun:stun.l.google.com:19302
-VITE_PEER_HOST=localhost
-VITE_PEER_PORT=9000
+VITE_BROADCAST_PEER_HOST=localhost
+VITE_BROADCAST_PEER_PORT=9000
+VITE_BROADCAST_PEER_PATH=/
 ```
 
 ## 📖 Usage Guide
@@ -89,8 +196,9 @@ VITE_PEER_PORT=9000
 
 ### Broadcasting
 1. Select "Broadcast" tab
-2. Scan for active peers
-3. Send messages to all
+2. Click "SCAN_NETWORK" to find active peers
+3. Type your message
+4. Click "SEND" to broadcast to all
 
 ## 🐛 Troubleshooting
 
@@ -104,10 +212,16 @@ VITE_PEER_PORT=9000
 - **Use HTTPS in production**
 - **Try Chrome or Firefox**
 
-### No Peers Found
-- **Start peer server**: `npm run peer-server`
-- **Check port 9000 is free**
-- **Verify network connection**
+### Broadcast: "Could not connect to server at localhost:9000"
+- **If deployed on Netlify**: Configure public PeerJS server in environment variables (see [Netlify Deployment Configuration](#netlify-deployment-configuration))
+- **If local development**: Make sure you have configured `VITE_BROADCAST_PEER_HOST` in your `.env` file
+- **Never use localhost for production deployments**
+
+### No Peers Found in Broadcast
+- **Verify PeerJS server is accessible**
+- **Check that server supports peer listing**
+- **Ensure all peers are connected to the same server**
+- **Try clicking "SCAN_NETWORK" again**
 
 ## 🎨 Theme
 
