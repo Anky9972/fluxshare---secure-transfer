@@ -42,18 +42,19 @@ The Broadcast Hub feature requires a PeerJS server that supports **peer listing*
 
 #### Deploy Your Own PeerJS Server (Required)
 
-I've created a ready-to-deploy PeerJS server in the `peer-server-deploy/` directory with peer listing enabled.
+FluxShare includes a local PeerJS server in `server/peer-server.cjs` with peer listing enabled.
 
-**Quick Deploy to Railway (Free):**
+**Deploy Options:**
 
+**Option 1: Deploy to Railway (Free)**
 1. Go to [Railway](https://railway.app) and sign in with GitHub
 2. Click **New Project** → **Deploy from GitHub repo**
 3. Select your FluxShare repository
-4. Set root directory to `peer-server-deploy`
-5. Railway will auto-detect and deploy
+4. Configure the start command: `node server/peer-server.cjs`
+5. Railway will deploy your PeerJS server
 6. Copy your deployment URL (e.g., `your-app.railway.app`)
 
-**Alternative Platforms:**
+**Option 2: Other Platforms**
 - [Render](https://render.com) - Free tier available
 - [Heroku](https://heroku.com) - Paid tiers
 - Any VPS with Node.js support
@@ -66,26 +67,6 @@ VITE_BROADCAST_PEER_HOST=your-app.railway.app
 VITE_BROADCAST_PEER_PORT=443
 VITE_BROADCAST_PEER_PATH=/
 ```
-
-For detailed deployment instructions, see [peer-server-deploy/README.md](file:///c:/Users/asus/Downloads/fluxshare---secure-transfer/peer-server-deploy/README.md)
-
-
-For better reliability and control, deploy your own PeerJS server:
-
-1. **Quick Deploy to Railway/Render/Heroku**:
-   ```bash
-   # Navigate to the deployment directory
-   cd peer-server-deploy
-   
-   # See README.md for detailed deployment instructions
-   ```
-
-2. **Update your `.env`**:
-   ```env
-   VITE_BROADCAST_PEER_HOST=your-app.railway.app
-   VITE_BROADCAST_PEER_PORT=443
-   VITE_BROADCAST_PEER_PATH=/
-   ```
 
 ### Netlify Deployment Configuration
 
@@ -162,10 +143,12 @@ npm run dev
 ```
 
 ### For Local Development with Broadcast
-If you want to run a local PeerJS server for testing broadcast features:
+If you want to run a local PeerJS server for testing broadcast features, use the included server:
 ```bash
 npm run peer-server
 ```
+
+This will start the PeerJS server at `server/peer-server.cjs` on port 9000 with peer listing enabled.
 
 Then update your `.env`:
 ```

@@ -116,10 +116,22 @@ const BroadcastHub: React.FC = () => {
                 });
 
                 peer.on('connection', (conn: any) => {
+                    // Open the connection to establish the data channel
+                    conn.on('open', () => {
+                        console.log(`[BroadcastHub] Incoming connection opened from ${conn.peer}`);
+                        addLog(`Incoming connection from ${conn.peer}`);
+                    });
+
                     conn.on('data', (data: any) => {
                         if (data.type === 'broadcast') {
-                            addLog(`BROADCAST RECEIVED from ${conn.peer}: ${data.text}`);
+                            console.log(`[BroadcastHub] Received broadcast data:`, data);
+                            addLog(`📢 BROADCAST from ${conn.peer}: ${data.text}`);
                         }
+                    });
+
+                    // Handle connection errors
+                    conn.on('error', (err: any) => {
+                        console.error('Connection error:', err);
                     });
                 });
 
@@ -220,7 +232,7 @@ const BroadcastHub: React.FC = () => {
                     setTimeout(() => {
                         conn.close();
                         resolve();
-                    }, 500); // Give it a moment to send
+                    }, 2000); // Give it a moment to send
                 });
 
                 conn.on('error', () => {
@@ -235,6 +247,7 @@ const BroadcastHub: React.FC = () => {
 
         await Promise.all(promises);
 
+        addLog(`📤 YOU SENT: "${message}"`);
         addLog(`Broadcast complete. Sent to ${sentCount}/${activePeers.length} peers.`);
         setMessage('');
         setIsBroadcasting(false);

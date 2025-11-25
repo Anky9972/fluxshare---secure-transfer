@@ -128,8 +128,14 @@ VITE_ENV=development
 npm run dev
 ```
 
-5. **Start peer server** (for Broadcast feature)
+This will start both the Vite dev server (port 5173) and the local PeerJS server (port 9000) concurrently.
+
+Alternatively, you can run them separately:
 ```bash
+# Terminal 1: Start Vite dev server
+vite
+
+# Terminal 2: Start peer server (for Broadcast feature)
 npm run peer-server
 ```
 
@@ -281,13 +287,19 @@ fluxshare/
 │   ├── FilePreviewModal.tsx    # Universal file previewer
 │   ├── DocsModal.tsx           # Documentation modal
 │   └── StatusModal.tsx         # System status display
+├── server/
+│   └── peer-server.cjs         # Local PeerJS server with peer listing
 ├── services/
 │   └── geminiService.ts        # AI assistant integration
-├── types/
-│   └── index.ts                # TypeScript type definitions
 ├── App.tsx                     # Main application component
+├── types.ts                    # TypeScript type definitions
 ├── index.html                  # HTML entry point with styles
 ├── index.tsx                   # React entry point
+├── vite.config.ts              # Vite configuration
+├── tsconfig.json               # TypeScript configuration
+├── package.json                # Project dependencies
+├── .env.example                # Environment variables template
+├── DOCS.md                     # Detailed documentation
 └── README.md                   # This file
 ```
 
