@@ -17,7 +17,14 @@ enum Tab {
 }
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>(Tab.SFTP);
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const savedTab = localStorage.getItem('activeTab');
+    return (savedTab as Tab) || Tab.SFTP;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
   // ... (rest of state)
 
   // ... (rest of effects)
