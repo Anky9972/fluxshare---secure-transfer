@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, Mic, MicOff, VideoOff, Phone, PhoneOff, Users, MessageSquare, Send, Search, Wifi, ShieldCheck, Activity, SwitchCamera } from 'lucide-react';
-import { ChatMessage } from '../types';
+import { Video, Mic, MicOff, VideoOff, Phone, PhoneOff, Users, MessageSquare, Send, Search, Wifi, ShieldCheck, Activity, SwitchCamera, Smile, Play, Pause, Monitor, MonitorOff } from 'lucide-react';
+import { ChatMessage, VoiceRecording } from '../types';
+import CyberpunkEmojiPicker from './shared/EmojiPicker';
+import { audioService } from '../services/audioService';
+import { notificationService } from '../services/notificationService';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import WhiteboardPanel from './WhiteboardPanel';
 
 declare const Peer: any;
 
@@ -25,6 +31,13 @@ const CommunicationHub: React.FC = () => {
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
     const [chatInput, setChatInput] = useState('');
+    const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+    const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const [activeTab, setActiveTab] = useState<'chat' | 'whiteboard'>('chat');
+    const [isTyping, setIsTyping] = useState(false);
+    const [peerTyping, setPeerTyping] = useState(false);
+    const [remoteStrokes, setRemoteStrokes] = useState<any[]>([]);
 
     const peerRef = useRef<any>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
@@ -131,7 +144,38 @@ const CommunicationHub: React.FC = () => {
         connRef.current = conn;
         conn.on('data', (data: any) => {
             if (data.type === 'chat') {
-                setChatHistory(prev => [...prev, { id: generateUUID(), sender: 'peer', text: data.text, timestamp: Date.now() }]);
+                setChatHistory(prev => [...prev, {
+                    id: generateUUID(),
+                    sender: 'peer',
+                    text: data.text,
+                    timestamp: data.timestamp || Date.now()
+                }]);
+                notificationService.notifyNewMessage('Peer', data.text);
+            } else if (data.type === 'voice') {
+                // Receive voice message
+                const voiceRecording: VoiceRecording = {
+                    id: generateUUID(),
+                    audioData: data.audioData,
+                    duration: data.duration,
+                    timestamp: data.timestamp,
+                    waveformData: data.waveformData,
+                    blob: new Blob() // Placeholder, will be created from audioData
+                };
+                setChatHistory(prev => [...prev, {
+                    id: generateUUID(),
+                    sender: 'peer',
+                    text: '',
+                    timestamp: data.timestamp,
+                    voiceRecording
+                }]);
+                notificationService.notifyNewMessage('Peer', '🎤 Voice message');
+                audioService.playSound('receive');
+            } else if (data.type === 'whiteboard') {
+                // Receive whiteboard stroke from peer
+                setRemoteStrokes(prev => [...prev, data.stroke]);
+            } else if (data.type === 'whiteboard-clear') {
+                // Clear whiteboard when peer clears
+                setRemoteStrokes([]);
             }
         });
         conn.on('open', () => {
@@ -227,9 +271,81 @@ const CommunicationHub: React.FC = () => {
 
     const sendChat = () => {
         if (!chatInput.trim() || !connRef.current) return;
-        connRef.current.send({ type: 'chat', text: chatInput });
+        connRef.current.send({ type: 'chat', text: chatInput, timestamp: Date.now() });
         setChatHistory(prev => [...prev, { id: generateUUID(), sender: 'me', text: chatInput, timestamp: Date.now() }]);
         setChatInput('');
+        audioService.playSound('send');
+    };
+
+    const startVoiceRecording = async () => {
+        try {
+            await audioService.startRecording();
+            setIsRecordingVoice(true);
+        } catch (error) {
+            notificationService.showToast({ type: 'error', message: 'Failed to start recording' });
+        }
+    };
+
+    const stopVoiceRecording = async () => {
+        try {
+            const recording = await audioService.stopRecording();
+            setIsRecordingVoice(false);
+
+            // Send voice message
+            if (connRef.current) {
+                const audioData = await audioService.recordingToBase64(recording);
+                connRef.current.send({
+                    type: 'voice',
+                    audioData,
+                    duration: recording.duration,
+                    timestamp: Date.now(),
+                    waveformData: recording.waveformData
+                });
+
+                // Add to local chat
+                setChatHistory(prev => [...prev, {
+                    id: generateUUID(),
+                    sender: 'me',
+                    text: '',
+                    timestamp: Date.now(),
+                    voiceRecording: recording
+                }]);
+
+                audioService.playSound('send');
+                notificationService.showToast({ type: 'success', message: 'Voice message sent!' });
+            }
+        } catch (error) {
+            setIsRecordingVoice(false);
+            notificationService.showToast({ type: 'error', message: 'Failed to send voice message' });
+        }
+    };
+
+    const playVoiceMessage = async (recording: VoiceRecording) => {
+        try {
+            setPlayingVoiceId(recording.id);
+            if (recording.audioData) {
+                // Convert base64 to blob recording
+                const rec = audioService.base64ToRecording(recording.audioData, recording.duration, recording.waveformData);
+                await audioService.playRecording(rec);
+            } else if (recording.blob) {
+                // Play directly if blob exists
+                await audioService.playRecording({
+                    id: recording.id,
+                    blob: recording.blob,
+                    duration: recording.duration,
+                    timestamp: recording.timestamp,
+                    waveformData: recording.waveformData
+                });
+            }
+            setPlayingVoiceId(null);
+        } catch (error) {
+            setPlayingVoiceId(null);
+            console.error('Failed to play voice message:', error);
+        }
+    };
+
+    const handleEmojiSelect = (emoji: string) => {
+        setChatInput(prev => prev + emoji);
     };
 
     const flipCamera = async () => {
@@ -267,6 +383,104 @@ const CommunicationHub: React.FC = () => {
             }
         } catch (err) {
             addLog('Could not flip camera');
+            console.error(err);
+        }
+    };
+
+    const toggleScreenShare = async () => {
+        try {
+            if (!isScreenSharing) {
+                // Start screen sharing
+                const screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
+                    video: {
+                        cursor: 'always',
+                        displaySurface: 'monitor'
+                    },
+                    audio: false
+                });
+
+                // Replace video track with screen track
+                const screenTrack = screenStream.getVideoTracks()[0];
+
+                // Handle when user stops sharing via browser UI
+                screenTrack.onended = () => {
+                    setIsScreenSharing(false);
+                    // Restart camera
+                    flipCamera().catch(() => {
+                        addLog('Could not restart camera after screen share');
+                    });
+                };
+
+                // Update local video
+                if (localVideoRef.current) {
+                    localVideoRef.current.srcObject = screenStream;
+                }
+
+                // Update stream reference
+                const oldVideoTrack = localStreamRef.current?.getVideoTracks()[0];
+                if (oldVideoTrack) {
+                    oldVideoTrack.stop();
+                    localStreamRef.current?.removeTrack(oldVideoTrack);
+                }
+                localStreamRef.current?.addTrack(screenTrack);
+
+                // Update peer connection if in call
+                if (currentCallRef.current && callStatus === 'connected') {
+                    const sender = currentCallRef.current.peerConnection
+                        .getSenders()
+                        .find((s: any) => s.track && s.track.kind === 'video');
+                    if (sender) {
+                        await sender.replaceTrack(screenTrack);
+                    }
+                }
+
+                setIsScreenSharing(true);
+                addLog('Screen sharing started');
+                notificationService.showToast({ type: 'success', message: 'Screen sharing started' });
+            } else {
+                // Stop screen sharing and go back to camera
+                const cameraConstraints = {
+                    video: {
+                        facingMode: facingMode,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: true
+                };
+
+                const cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
+                const videoTrack = cameraStream.getVideoTracks()[0];
+
+                // Update local video
+                if (localVideoRef.current) {
+                    localVideoRef.current.srcObject = cameraStream;
+                }
+
+                // Update stream reference
+                const oldVideoTrack = localStreamRef.current?.getVideoTracks()[0];
+                if (oldVideoTrack) {
+                    oldVideoTrack.stop();
+                    localStreamRef.current?.removeTrack(oldVideoTrack);
+                }
+                localStreamRef.current = cameraStream;
+
+                // Update peer connection if in call
+                if (currentCallRef.current && callStatus === 'connected') {
+                    const sender = currentCallRef.current.peerConnection
+                        .getSenders()
+                        .find((s: any) => s.track && s.track.kind === 'video');
+                    if (sender) {
+                        await sender.replaceTrack(videoTrack);
+                    }
+                }
+
+                setIsScreenSharing(false);
+                addLog('Screen sharing stopped');
+                notificationService.showToast({ type: 'info', message: 'Screen sharing stopped' });
+            }
+        } catch (err) {
+            addLog('Screen share toggle failed');
+            notificationService.showToast({ type: 'error', message: 'Screen sharing not available or denied' });
             console.error(err);
         }
     };
@@ -387,6 +601,13 @@ const CommunicationHub: React.FC = () => {
                         <button onClick={flipCamera} className="p-2 sm:p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all">
                             <SwitchCamera size={18} />
                         </button>
+                        <button
+                            onClick={toggleScreenShare}
+                            className={`p-2 sm:p-3 rounded-full transition-all ${isScreenSharing ? 'bg-[#00ff9d]/20 text-[#00ff9d]' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                            title={isScreenSharing ? 'Stop screen sharing' : 'Share screen'}
+                        >
+                            {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
+                        </button>
                         {callStatus === 'connected' && (
                             <button onClick={endCall} className="p-2 sm:p-3 rounded-full bg-red-500 hover:bg-red-600 text-white transition-all">
                                 <PhoneOff size={18} />
@@ -395,33 +616,164 @@ const CommunicationHub: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Chat Area */}
-                <div className="h-[180px] sm:h-[200px] bg-[#050510]/80 border border-[#333] rounded-xl flex flex-col">
-                    <div className="flex-1 p-4 overflow-y-auto space-y-2">
-                        {chatHistory.map((msg) => (
-                            <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${msg.sender === 'me'
-                                    ? 'bg-[#00f3ff]/10 text-[#00f3ff] border border-[#00f3ff]/30'
-                                    : 'bg-[#bc13fe]/10 text-[#bc13fe] border border-[#bc13fe]/30'
-                                    }`}>
-                                    {msg.text}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="p-2 border-t border-[#333] flex gap-2">
-                        <input
-                            type="text"
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-                            placeholder="SEND_MESSAGE..."
-                            className="flex-1 bg-transparent border-none focus:outline-none text-white font-mono text-sm px-2"
-                        />
-                        <button onClick={sendChat} className="text-[#00f3ff] hover:text-white transition-colors">
-                            <Send size={18} />
+                {/* Chat/Whiteboard Tabbed Area */}
+                <div className="h-[180px] sm:h-[250px] bg-[#050510]/80 border border-[#333] rounded-xl flex flex-col">
+                    {/* Tab Headers */}
+                    <div className="flex border-b border-[#333] bg-[#0a0a1a]">
+                        <button
+                            onClick={() => setActiveTab('chat')}
+                            className={`flex-1 px-4 py-2 text-xs font-mono transition-all ${activeTab === 'chat'
+                                ? 'bg-[#050510] text-[#00f3ff] border-b-2 border-[#00f3ff]'
+                                : 'text-gray-500 hover:text-white'
+                                }`}
+                        >
+                            💬 CHAT
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('whiteboard')}
+                            className={`flex-1 px-4 py-2 text-xs font-mono transition-all ${activeTab === 'whiteboard'
+                                ? 'bg-[#050510] text-[#bc13fe] border-b-2 border-[#bc13fe]'
+                                : 'text-gray-500 hover:text-white'
+                                }`}
+                        >
+                            🎨 WHITEBOARD
                         </button>
                     </div>
+
+                    {/* Tab Content */}
+                    {activeTab === 'chat' ? (
+                        <div className="flex-1 overflow-hidden flex flex-col">
+                            <div className="flex-1 p-4 overflow-y-auto space-y-2">
+                                {chatHistory.map((msg) => (
+                                    <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${msg.sender === 'me'
+                                            ? 'bg-[#00f3ff]/10 text-[#00f3ff] border border-[#00f3ff]/30'
+                                            : 'bg-[#bc13fe]/10 text-[#bc13fe] border border-[#bc13fe]/30'
+                                            }`}>
+                                            {msg.voiceRecording ? (
+                                                /* Voice Message */
+                                                <div className="flex items-center gap-2 min-w-[150px]">
+                                                    <button
+                                                        onClick={() => msg.voiceRecording && playVoiceMessage(msg.voiceRecording)}
+                                                        disabled={playingVoiceId === msg.voiceRecording.id}
+                                                        className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors disabled:opacity-50"
+                                                    >
+                                                        {playingVoiceId === msg.voiceRecording.id ? <Pause size={14} /> : <Play size={14} />}
+                                                    </button>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-1 h-6">
+                                                            {msg.voiceRecording.waveformData?.slice(0, 20).map((val, i) => (
+                                                                <div
+                                                                    key={i}
+                                                                    className={`w-0.5 ${msg.sender === 'me' ? 'bg-[#00f3ff]' : 'bg-[#bc13fe]'} rounded-full`}
+                                                                    style={{ height: `${val * 100}%` }}
+                                                                />
+                                                            )) || <span className="text-xs">🎤 Voice</span>}
+                                                        </div>
+                                                        <div className="text-xs opacity-70 mt-1">
+                                                            {Math.floor(msg.voiceRecording.duration / 60)}:{(msg.voiceRecording.duration % 60).toString().padStart(2, '0')}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                /* Text Message */
+                                                <div className="prose prose-invert prose-sm max-w-none">
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkGfm]}
+                                                        components={{
+                                                            p: ({ node, ...props }) => <p className="mb-1" {...props} />,
+                                                            code: ({ node, className, children, ...props }: any) => {
+                                                                const inline = !className;
+                                                                return inline ? (
+                                                                    <code className="bg-black/50 px-1 py-0.5 rounded text-xs" {...props}>{children}</code>
+                                                                ) : (
+                                                                    <code className="block bg-black/50 p-2 rounded text-xs overflow-x-auto" {...props}>{children}</code>
+                                                                );
+                                                            },
+                                                            a: ({ node, ...props }) => <a className="text-[#00f3ff] hover:underline" {...props} target="_blank" rel="noopener noreferrer" />,
+                                                            strong: ({ node, ...props }) => <strong className="font-bold text-white" {...props} />,
+                                                            em: ({ node, ...props }) => <em className="italic" {...props} />,
+                                                            ul: ({ node, ...props }) => <ul className="list-disc list-inside text-xs" {...props} />,
+                                                            ol: ({ node, ...props }) => <ol className="list-decimal list-inside text-xs" {...props} />,
+                                                        }}
+                                                    >
+                                                        {msg.text}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="p-2 border-t border-[#333] flex gap-2 items-center">
+                                {/* Emoji Picker */}
+                                <CyberpunkEmojiPicker onEmojiSelect={handleEmojiSelect} />
+
+                                {/* Voice Recording Button */}
+                                {!isRecordingVoice ? (
+                                    <button
+                                        onClick={startVoiceRecording}
+                                        disabled={!connRef.current}
+                                        className="text-[#bc13fe] hover:text-white transition-colors disabled:opacity-30"
+                                        title="Record voice message"
+                                    >
+                                        <Mic size={18} />
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={stopVoiceRecording}
+                                        className="text-[#ff0055] animate-pulse"
+                                        title="Stop recording"
+                                    >
+                                        <MicOff size={18} />
+                                    </button>
+                                )}
+
+                                <input
+                                    type="text"
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && sendChat()}
+                                    placeholder={isRecordingVoice ? "RECORDING..." : "SEND_MESSAGE..."}
+                                    disabled={isRecordingVoice}
+                                    className="flex-1 bg-transparent border-none focus:outline-none text-white font-mono text-sm px-2 disabled:opacity-50"
+                                />
+                                <button
+                                    onClick={sendChat}
+                                    disabled={isRecordingVoice}
+                                    className="text-[#00f3ff] hover:text-white transition-colors disabled:opacity-30"
+                                >
+                                    <Send size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        /* Whiteboard Tab */
+                        <div className="flex-1 p-2">
+                            <WhiteboardPanel
+                                className="h-full"
+                                remoteStrokes={remoteStrokes}
+                                onStrokeDraw={(stroke) => {
+                                    // Send stroke to peer via data connection
+                                    if (connRef.current && connRef.current.open) {
+                                        connRef.current.send({
+                                            type: 'whiteboard',
+                                            stroke
+                                        });
+                                    }
+                                }}
+                                onClear={() => {
+                                    // Send clear signal to peer
+                                    setRemoteStrokes([]);
+                                    if (connRef.current && connRef.current.open) {
+                                        connRef.current.send({
+                                            type: 'whiteboard-clear'
+                                        });
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

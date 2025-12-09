@@ -1,13 +1,17 @@
 
+
 import React, { useState, useEffect } from 'react';
-import { Shield, Radio, Cpu, Zap, Crosshair, Terminal, Activity, Users } from 'lucide-react';
+import { Shield, Radio, Cpu, Zap, Crosshair, Terminal, Activity, Users, Settings } from 'lucide-react';
 import SFTPManager from './components/SFTPManager';
 import P2PShare from './components/P2PShare';
-
 import CommunicationHub from './components/CommunicationHub';
 import BroadcastHub from './components/BroadcastHub';
 import Header from './components/Header';
 import InteractiveBackground from './components/InteractiveBackground';
+import ToastContainer from './components/shared/ToastContainer';
+import SettingsModal from './components/SettingsModal';
+import InstallPrompt from './components/InstallPrompt';
+import { storageService } from './services/storageService';
 
 enum Tab {
   SFTP = 'SFTP',
@@ -21,18 +25,37 @@ const App: React.FC = () => {
     const savedTab = localStorage.getItem('activeTab');
     return (savedTab as Tab) || Tab.SFTP;
   });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
-  // ... (rest of state)
 
-  // ... (rest of effects)
+  // Apply saved theme on mount
+  useEffect(() => {
+    const theme = storageService.getCurrentTheme();
+    storageService.applyThemeToDOM(theme);
+  }, []);
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#050510] text-[#e0e0ff]">
       <InteractiveBackground />
       <Header />
+
+      {/* Global Components */}
+      <ToastContainer />
+      {/* PWA Install Prompt */}
+      <InstallPrompt />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+
+      {/* Settings Button (Fixed) */}
+      <button
+        onClick={() => setIsSettingsOpen(true)}
+        className="fixed top-6 right-6 z-50 bg-[#bc13fe]/20 border border-[#bc13fe] text-[#bc13fe] p-3 rounded-full hover:bg-[#bc13fe] hover:text-white transition-all shadow-lg hover:shadow-[0_0_20px_rgba(188,19,254,0.5)]"
+        title="Settings"
+      >
+        <Settings size={24} className="animate-spin-slow" />
+      </button>
 
       {/* Background Elements - Overlay only */}
       <div className="fixed inset-0 pointer-events-none z-0">

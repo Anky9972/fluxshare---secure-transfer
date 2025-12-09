@@ -1,0 +1,95 @@
+{
+    "name": "FluxShare - Secure P2P Transfer",
+    "short_name": "FluxShare",
+    "description": "Secure peer-to-peer file transfer and collaboration platform with video calls, screen sharing, and interactive whiteboard",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#050510",
+    "theme_color": "#00f3ff",
+    "orientation": "any",
+    "icons": [
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": [
+        "productivity",
+        "utilities",
+        "business"
+    ],
+    "screenshots": [
+        {
+            "src": "/screenshot-wide.png",
+            "sizes": "1280x720",
+            "type": "image/png",
+            "form_factor": "wide"
+        },
+        {
+            "src": "/screenshot-narrow.png",
+            "sizes": "750x1334",
+            "type": "image/png",
+            "form_factor": "narrow"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Send Files",
+            "short_name": "Send",
+            "description": "Send files via P2P",
+            "url": "/?mode=send",
+            "icons": [
+                {
+                    "src": "/icon-send.png",
+                    "sizes": "96x96"
+                }
+            ]
+        },
+        {
+            "name": "Video Call",
+            "short_name": "Call",
+            "description": "Start a video call",
+            "url": "/?mode=call",
+            "icons": [
+                {
+                    "src": "/icon-call.png",
+                    "sizes": "96x96"
+                }
+            ]
+        }
+    ],
+    "share_target": {
+        "action": "/share",
+        "method": "POST",
+        "enctype": "multipart/form-data",
+        "params": {
+            "title": "title",
+            "text": "text",
+            "url": "url",
+            "files": [
+                {
+                    "name": "file",
+                    "accept": [
+                        "*/*"
+                    ]
+                }
+            ]
+        }
+    },
+    "features": [
+        "peer-to-peer file transfer",
+        "video calling",
+        "screen sharing",
+        "voice messages",
+        "interactive whiteboard",
+        "end-to-end encryption"
+    ]
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Radio, Users, Send, RefreshCw, Globe, Settings, X, Save, AlertTriangle } from 'lucide-react';
+import { Radio, Users, Send, RefreshCw, Globe, Settings, X, Save, AlertTriangle, MessageSquare } from 'lucide-react';
 
 declare const Peer: any;
 
@@ -28,13 +28,26 @@ const DEFAULT_SETTINGS: PeerSettings = {
     secure: false
 };
 
+interface ChatMessage {
+    id: string;
+    text: string;
+    sender: 'me' | 'peer';
+    from: string;
+    timestamp: number;
+}
+
 const BroadcastHub: React.FC = () => {
     const [myId, setMyId] = useState<string>('');
     const [activePeers, setActivePeers] = useState<string[]>([]);
     const [message, setMessage] = useState('');
     const [logs, setLogs] = useState<string[]>([]);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [isScanning, setIsScanning] = useState(false);
     const [isBroadcasting, setIsBroadcasting] = useState(false);
+
+    // Chat Widget State
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     // Settings State
     const [showSettings, setShowSettings] = useState(false);
@@ -126,6 +139,21 @@ const BroadcastHub: React.FC = () => {
                         if (data.type === 'broadcast') {
                             console.log(`[BroadcastHub] Received broadcast data:`, data);
                             addLog(`📢 BROADCAST from ${conn.peer}: ${data.text}`);
+
+                            // Add to chat messages
+                            setChatMessages(prev => [...prev, {
+                                id: `${Date.now()}_${Math.random()}`,
+                                text: data.text,
+                                sender: 'peer',
+                                from: conn.peer,
+                                timestamp: Date.now()
+                            }]);
+
+                            // Auto-open chat and increment unread if closed
+                            if (!isChatOpen) {
+                                setIsChatOpen(true);
+                                setUnreadCount(prev => prev + 1);
+                            }
                         }
                     });
 
@@ -249,6 +277,16 @@ const BroadcastHub: React.FC = () => {
 
         addLog(`📤 YOU SENT: "${message}"`);
         addLog(`Broadcast complete. Sent to ${sentCount}/${activePeers.length} peers.`);
+
+        // Add to chat messages
+        setChatMessages(prev => [...prev, {
+            id: `${Date.now()}_${Math.random()}`,
+            text: message,
+            sender: 'me',
+            from: myId,
+            timestamp: Date.now()
+        }]);
+
         setMessage('');
         setIsBroadcasting(false);
     };
@@ -261,7 +299,7 @@ const BroadcastHub: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 min-h-[60vh] lg:h-[70vh] overflow-y-auto relative">
+        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 min-h-[60vh] lg:h-[70vh] relative">
 
             {/* Settings Modal */}
             {showSettings && (
@@ -394,19 +432,36 @@ const BroadcastHub: React.FC = () => {
                 </div>
             </div>
 
-            {/* Right Panel: Broadcast Console */}
+            {/* Right Panel: Logs Only (Chat moved to floating widget) */}
             <div className="lg:col-span-2 flex flex-col gap-4">
-                {/* Logs */}
-                <div className="min-h-[300px] lg:flex-1 bg-black/80 border border-[#333] rounded-xl p-4 font-mono text-xs overflow-y-auto relative">
+                {/* System Logs */}
+                <div className="min-h-[400px] lg:flex-1 bg-black/80 border border-[#333] rounded-xl p-4 font-mono text-xs overflow-y-auto relative">
                     <div className="absolute top-0 right-0 p-2 text-[#bc13fe] text-[10px] tracking-widest opacity-50">
                         BROADCAST_LOGS
                     </div>
-                    {logs.map((log, i) => (
-                        <div key={i} className="mb-1 text-gray-400 border-b border-white/5 pb-1 last:border-0">
-                            <span className="text-[#bc13fe] mr-2">➜</span>
-                            {log}
-                        </div>
-                    ))}
+                    {logs.map((log, i) => {
+                        const isSent = log.includes('📤 YOU SENT');
+                        const isReceived = log.includes('📢 BROADCAST from');
+                        const isSystem = !isSent && !isReceived;
+
+                        return (
+                            <div
+                                key={i}
+                                className={`mb-2 pb-2 border-b border-white/5 last:border-0 ${isSent ? 'text-[#00ff9d]' :
+                                    isReceived ? 'text-[#00f3ff]' :
+                                        'text-gray-400'
+                                    }`}
+                            >
+                                <span className={`mr-2 ${isSent ? 'text-[#00ff9d]' :
+                                    isReceived ? 'text-[#00f3ff]' :
+                                        'text-[#bc13fe]'
+                                    }`}>
+                                    {isSent ? '↑' : isReceived ? '↓' : '➜'}
+                                </span>
+                                {log}
+                            </div>
+                        );
+                    })}
                 </div>
 
                 {/* Input Area */}
@@ -434,6 +489,79 @@ const BroadcastHub: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Floating Chat Widget */}
+            <button
+                onClick={() => {
+                    setIsChatOpen(!isChatOpen);
+                    if (!isChatOpen) setUnreadCount(0);
+                }}
+                className="fixed bottom-16 right-6 bg-[#00f3ff] hover:bg-[#00c2cc] text-black p-4 rounded-full shadow-2xl transition-all z-50 group"
+            >
+                <MessageSquare size={24} />
+                {unreadCount > 0 && !isChatOpen && (
+                    <div className="absolute -top-2 -right-2 bg-[#ff0055] text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-pulse">
+                        {unreadCount}
+                    </div>
+                )}
+                <div className="absolute bottom-full right-0 mb-2 bg-black/90 text-white px-3 py-1 rounded text-xs font-mono whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    {isChatOpen ? 'CLOSE CHAT' : 'OPEN MESSAGES'}
+                </div>
+            </button>
+
+            {/* Chat Modal */}
+            {isChatOpen && (
+                <div className="fixed bottom-[150px] right-6 w-96 h-[500px] bg-gradient-to-br from-[#050510] to-[#0a0a1a] border-2 border-[#00f3ff] rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden"
+                    style={{
+                        clipPath: 'polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px)'
+                    }}
+                >
+                    {/* Chat Header */}
+                    <div className="bg-[#00f3ff]/10 border-b border-[#00f3ff]/30 p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <MessageSquare size={18} className="text-[#00f3ff]" />
+                            <h3 className="text-[#00f3ff] font-display font-bold text-sm">BROADCAST_CHAT</h3>
+                        </div>
+                        <button
+                            onClick={() => setIsChatOpen(false)}
+                            className="text-gray-400 hover:text-white transition-colors"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    {/* Chat Messages */}
+                    <div className="flex-1 p-4 overflow-y-auto space-y-3">
+                        {chatMessages.length === 0 ? (
+                            <div className="text-center text-gray-600 font-mono text-xs mt-10">
+                                NO_MESSAGES_YET
+                            </div>
+                        ) : (
+                            chatMessages.map((msg) => (
+                                <div
+                                    key={msg.id}
+                                    className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}
+                                >
+                                    <div className={`max-w-[75%] px-3 py-2 rounded-lg text-sm ${msg.sender === 'me'
+                                        ? 'bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/30'
+                                        : 'bg-[#00f3ff]/10 text-[#00f3ff] border border-[#00f3ff]/30'
+                                        }`}>
+                                        {msg.sender === 'peer' && (
+                                            <div className="text-xs opacity-70 mb-1 font-mono">
+                                                {msg.from.slice(0, 15)}...
+                                            </div>
+                                        )}
+                                        <div className="font-medium">{msg.text}</div>
+                                        <div className="text-[10px] opacity-50 mt-1 font-mono">
+                                            {new Date(msg.timestamp).toLocaleTimeString()}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

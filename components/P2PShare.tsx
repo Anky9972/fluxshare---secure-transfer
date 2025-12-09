@@ -1,9 +1,17 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, X, Download, CheckCircle2, Loader2, Wifi, File as FileIcon, Send, Radio, Copy, ShieldCheck, RefreshCw, Search, ArrowRight, MessageSquare, Terminal, Bot, Eye } from 'lucide-react';
+import { UploadCloud, X, Download, CheckCircle2, Loader2, Wifi, File as FileIcon, Send, Radio, Copy, ShieldCheck, RefreshCw, Search, ArrowRight, MessageSquare, Terminal, Bot, Eye, QrCode, Clock, BarChart2, Lock, Unlock } from 'lucide-react';
 import { FileTransfer, ChatMessage } from '../types';
 import { generateQuickReplies } from '../services/geminiService';
 import FilePreviewModal from './FilePreviewModal';
+import QRCodeGenerator from './shared/QRCodeGenerator';
+import FavoritesPanel from './FavoritesPanel';
+import TransferHistoryPanel from './TransferHistoryPanel';
+import AnalyticsDashboard from './AnalyticsDashboard';
+import { storageService } from '../services/storageService';
+import { audioService } from '../services/audioService';
+import { notificationService } from '../services/notificationService';
+import { encryptionService } from '../services/encryptionService';
 
 declare const Peer: any;
 const CHUNK_SIZE = 16 * 1024;
@@ -20,7 +28,7 @@ const generateUUID = () => {
 };
 
 const P2PShare: React.FC = () => {
-    const [mode, setMode] = useState<'send' | 'receive' | 'menu'>('menu');
+    const [mode, setMode] = useState<'send' | 'receive' | 'menu' | 'history' | 'analytics'>('menu');
     const [peerId, setPeerId] = useState<string>('');
     const [targetId, setTargetId] = useState<string>('');
     const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
@@ -41,6 +49,9 @@ const P2PShare: React.FC = () => {
     const [receivedMeta, setReceivedMeta] = useState<{ name: string, size: number, mime: string } | null>(null);
     const [showPreview, setShowPreview] = useState(false);
     const [previewFile, setPreviewFile] = useState<File | null>(null);
+    const [showQR, setShowQR] = useState(false);
+    const [encryptFile, setEncryptFile] = useState(false);
+    const [filePassword, setFilePassword] = useState('');
 
     const peerRef = useRef<any>(null);
     const connRef = useRef<any>(null);
@@ -164,6 +175,22 @@ const P2PShare: React.FC = () => {
             addLog('Secure tunnel established.');
             addSystemMessage(`Uplink established with ${conn.peer}`);
             setActiveTab('chat');
+            audioService.playSound('connect');
+            notificationService.notifyPeerConnected(conn.peer);
+            // Save to recent peers
+            const history = storageService.getHistory();
+            if (!history.find(h => h.peerId === conn.peer)) {
+                storageService.saveTransfer({
+                    id: Date.now().toString(),
+                    peerId: conn.peer,
+                    fileName: 'Connection',
+                    fileSize: 0,
+                    timestamp: Date.now(),
+                    direction: 'received',
+                    speed: 0,
+                    success: true
+                });
+            }
         });
 
         conn.on('data', (data: any) => {
@@ -174,6 +201,8 @@ const P2PShare: React.FC = () => {
             setConnectionStatus('disconnected');
             addLog('Connection severed.');
             addSystemMessage('Connection lost.');
+            audioService.playSound('disconnect');
+            notificationService.notifyPeerDisconnected(conn.peer);
             resetTransfer();
         });
     };
@@ -284,32 +313,88 @@ const P2PShare: React.FC = () => {
     // MAIN MENU
     if (mode === 'menu') {
         return (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fadeIn h-[500px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
                 <button
                     onClick={() => setMode('send')}
-                    className="group relative bg-[#00f3ff]/5 border border-[#00f3ff]/30 hover:border-[#00f3ff] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg active:scale-95"
+                    className="group relative bg-[#00f3ff]/5 border border-[#00f3ff]/30 hover:border-[#00f3ff] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg active:scale-95 h-[240px]"
                 >
                     <div className="absolute inset-0 bg-gradient-to-br from-[#00f3ff]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-scanline"></div>
                     <div className="relative z-10 flex flex-col items-center">
-                        <Send size={64} className="text-[#00f3ff] mb-6 group-hover:scale-110 transition-transform duration-500 group-hover:animate-pulse" />
-                        <h3 className="text-4xl font-display font-bold text-white tracking-tighter group-hover:text-[#00f3ff] transition-colors">TRANSMITTER</h3>
+                        <Send size={56} className="text-[#00f3ff] mb-4 group-hover:scale-110 transition-transform duration-500 group-hover:animate-pulse" />
+                        <h3 className="text-3xl font-display font-bold text-white tracking-tighter group-hover:text-[#00f3ff] transition-colors">TRANSMITTER</h3>
                         <p className="font-mono text-[#00f3ff] text-xs mt-2 tracking-[0.3em]">INIT_SOURCE_PROTOCOL</p>
                     </div>
                 </button>
 
                 <button
                     onClick={() => setMode('receive')}
-                    className="group relative bg-[#bc13fe]/5 border border-[#bc13fe]/30 hover:border-[#bc13fe] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg active:scale-95"
+                    className="group relative bg-[#bc13fe]/5 border border-[#bc13fe]/30 hover:border-[#bc13fe] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg active:scale-95 h-[240px]"
                 >
                     <div className="absolute inset-0 bg-gradient-to-bl from-[#bc13fe]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-scanline"></div>
                     <div className="relative z-10 flex flex-col items-center">
-                        <Download size={64} className="text-[#bc13fe] mb-6 group-hover:scale-110 transition-transform duration-500 group-hover:animate-pulse" />
-                        <h3 className="text-4xl font-display font-bold text-white tracking-tighter group-hover:text-[#bc13fe] transition-colors">RECEIVER</h3>
+                        <Download size={56} className="text-[#bc13fe] mb-4 group-hover:scale-110 transition-transform duration-500 group-hover:animate-pulse" />
+                        <h3 className="text-3xl font-display font-bold text-white tracking-tighter group-hover:text-[#bc13fe] transition-colors">RECEIVER</h3>
                         <p className="font-mono text-[#bc13fe] text-xs mt-2 tracking-[0.3em]">INIT_TARGET_PROTOCOL</p>
                     </div>
                 </button>
+
+                <button
+                    onClick={() => setMode('history')}
+                    className="group relative bg-[#00ff9d]/5 border border-[#00ff9d]/30 hover:border-[#00ff9d] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg active:scale-95 h-[240px]"
+                >
+                    <div className="absolute inset-0 bg-gradient-to-br from-[#00ff9d]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-scanline"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                        <Clock size={56} className="text-[#00ff9d] mb-4 group-hover:scale-110 transition-transform duration-500 group-hover:animate-pulse" />
+                        <h3 className="text-3xl font-display font-bold text-white tracking-tighter group-hover:text-[#00ff9d] transition-colors">HISTORY</h3>
+                        <p className="font-mono text-[#00ff9d] text-xs mt-2 tracking-[0.3em]">VIEW_TRANSFERS</p>
+                    </div>
+                </button>
+
+                <button
+                    onClick={() => setMode('analytics')}
+                    className="group relative bg-[#f3ff00]/5 border border-[#f3ff00]/30 hover:border-[#f3ff00] flex flex-col items-center justify-center transition-all duration-500 overflow-hidden rounded-lg active:scale-95 h-[240px]"
+                >
+                    <div className="absolute inset-0 bg-gradient-to-bl from-[#f3ff00]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-scanline"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                        <BarChart2 size={56} className="text-[#f3ff00] mb-4 group-hover:scale-110 transition-transform duration-500 group-hover:animate-pulse" />
+                        <h3 className="text-3xl font-display font-bold text-white tracking-tighter group-hover:text-[#f3ff00] transition-colors">ANALYTICS</h3>
+                        <p className="font-mono text-[#f3ff00] text-xs mt-2 tracking-[0.3em]">VIEW_STATS</p>
+                    </div>
+                </button>
+            </div>
+        );
+    }
+
+    // HISTORY VIEW
+    if (mode === 'history') {
+        return (
+            <div className="animate-fadeIn">
+                <button
+                    onClick={() => setMode('menu')}
+                    className="flex items-center gap-2 text-gray-500 hover:text-white font-mono text-xs uppercase tracking-widest transition-colors mb-6"
+                >
+                    <ArrowRight size={16} className="rotate-180" /> Back to Menu
+                </button>
+                <TransferHistoryPanel />
+            </div>
+        );
+    }
+
+    // ANALYTICS VIEW
+    if (mode === 'analytics') {
+        return (
+            <div className="animate-fadeIn">
+                <button
+                    onClick={() => setMode('menu')}
+                    className="flex items-center gap-2 text-gray-500 hover:text-white font-mono text-xs uppercase tracking-widest transition-colors mb-6"
+                >
+                    <ArrowRight size={16} className="rotate-180" /> Back to Menu
+                </button>
+                <AnalyticsDashboard />
             </div>
         );
     }
@@ -336,11 +421,55 @@ const P2PShare: React.FC = () => {
                     {/* My ID */}
                     <div className="p-4 border border-[#00f3ff]/30 bg-[#0a0a15] relative overflow-hidden rounded-lg shrink-0">
                         <span className="text-[#00f3ff] font-mono text-[10px] uppercase tracking-widest absolute top-2 left-3">LOCAL_NODE_ID</span>
-                        <div className="mt-4 flex items-center justify-between bg-[#000] p-2 rounded border border-[#00f3ff]/10">
-                            <span className="font-mono text-lg text-white tracking-wider truncate mr-2">{peerId || '...'}</span>
-                            <button onClick={() => navigator.clipboard.writeText(peerId)} className="text-[#00f3ff] hover:text-white transition-colors shrink-0"><Copy size={16} /></button>
+                        <div className="mt-4 flex items-center gap-2">
+                            <div className="flex-1 flex items-center bg-[#000] p-2 rounded border border-[#00f3ff]/10">
+                                <span className="font-mono text-lg text-white tracking-wider truncate mr-2">{peerId || '...'}</span>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(peerId);
+                                    audioService.playSound('success');
+                                    notificationService.showToast({ type: 'success', message: 'ID copied!' });
+                                }}
+                                className="text-[#00f3ff] hover:text-white transition-colors shrink-0 p-2 bg-[#000] border border-[#00f3ff]/10 rounded"
+                                title="Copy ID"
+                            >
+                                <Copy size={16} />
+                            </button>
+                            <button
+                                onClick={() => setShowQR(!showQR)}
+                                className="text-[#bc13fe] hover:text-white transition-colors shrink-0 p-2 bg-[#000] border border-[#bc13fe]/10 rounded"
+                                title="Show QR Code"
+                            >
+                                <QrCode size={16} />
+                            </button>
                         </div>
+                        {/* QR Code Panel */}
+                        {showQR && peerId && (
+                            <div className="mt-3 flex justify-center">
+                                <QRCodeGenerator
+                                    value={peerId}
+                                    title="SCAN_TO_CONNECT"
+                                    size={150}
+                                    showActions={true}
+                                    className="w-full"
+                                />
+                            </div>
+                        )}
                     </div>
+
+                    {/* Favorites Panel */}
+                    <FavoritesPanel
+                        onPeerSelect={(id) => {
+                            setTargetId(id);
+                            // Auto-scroll to connect button
+                            setTimeout(() => {
+                                const connectBtn = document.querySelector('[data-connect-btn]');
+                                connectBtn?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }, 100);
+                        }}
+                        className="shrink-0"
+                    />
 
                     {/* Connect Form */}
                     {connectionStatus !== 'connected' && (
@@ -355,6 +484,7 @@ const P2PShare: React.FC = () => {
                                     placeholder="PASTE ID HERE"
                                 />
                                 <button
+                                    data-connect-btn
                                     onClick={connectToPeer}
                                     disabled={!targetId}
                                     className="bg-[#bc13fe] text-white p-2 rounded hover:bg-[#a010d8] transition-colors disabled:opacity-50"
@@ -500,6 +630,47 @@ const P2PShare: React.FC = () => {
                                                     </div>
                                                 </div>
                                                 {transferProgress === 0 && <button onClick={() => setSelectedFile(null)}><X className="text-gray-500 hover:text-white" /></button>}
+                                            </div>
+
+                                            {/* Encryption Toggle */}
+                                            <div className="mb-6 bg-[#0a0a1a] border border-[#333] rounded-lg p-4">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        {encryptFile ? (
+                                                            <Lock size={18} className="text-[#00ff9d]" />
+                                                        ) : (
+                                                            <Unlock size={18} className="text-gray-500" />
+                                                        )}
+                                                        <span className="text-sm font-medium text-white">File Encryption</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            setEncryptFile(!encryptFile);
+                                                            if (!encryptFile) {
+                                                                audioService.playSound('success');
+                                                            }
+                                                        }}
+                                                        className={`relative w-12 h-6 rounded-full transition-colors ${encryptFile ? 'bg-[#00ff9d]' : 'bg-[#333]'
+                                                            }`}
+                                                    >
+                                                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${encryptFile ? 'translate-x-7' : 'translate-x-1'
+                                                            }`} />
+                                                    </button>
+                                                </div>
+                                                {encryptFile && (
+                                                    <div className="animate-fadeIn">
+                                                        <input
+                                                            type="password"
+                                                            value={filePassword}
+                                                            onChange={(e) => setFilePassword(e.target.value)}
+                                                            placeholder="Enter encryption password"
+                                                            className="w-full bg-[#050510] border border-[#00ff9d]/30 rounded px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-[#00ff9d] transition-colors"
+                                                        />
+                                                        <p className="text-xs text-gray-500 mt-2 font-mono">
+                                                            🔒 File will be encrypted with AES-256 before transfer
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {transferProgress > 0 ? (
