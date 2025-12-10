@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Download, Monitor, Video, Copy, QrCode, X, FileText, Image as ImageIcon, Music, Film, Archive, RefreshCw, Smartphone, Shield, AlertTriangle, Check, Clock, Globe, Zap, Search, Sun, Moon, Link, Eye, Share2, BarChart2, ArrowRight, Bot, Sparkles, Terminal, MessageSquare, ShieldCheck, UploadCloud, Lock, Unlock, Loader2, CheckCircle2, Wifi } from 'lucide-react';
+import { Send, Download, Monitor, Video, Copy, QrCode, X, FileText, Image as ImageIcon, Music, Film, Archive, RefreshCw, Smartphone, Shield, AlertTriangle, Check, Clock, Globe, Zap, Search, Sun, Moon, Link, Eye, Share2, BarChart2, ArrowRight, Bot, Sparkles, Terminal, MessageSquare, ShieldCheck, UploadCloud, Lock, Unlock, Loader2, CheckCircle2, Wifi, Pause, Play, XCircle } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { FileTransfer, ChatMessage } from '../types';
 import FilePreviewModal from './FilePreviewModal';
@@ -11,6 +11,8 @@ import { storageService } from '../services/storageService';
 import { audioService } from '../services/audioService';
 import { notificationService } from '../services/notificationService';
 import { encryptionService } from '../services/encryptionService';
+import { transferQueueService, QueuedFile } from '../services/transferQueueService';
+import { resumableTransferService } from '../services/resumableTransferService';
 
 declare const Peer: any;
 const CHUNK_SIZE = 16 * 1024;
@@ -55,12 +57,19 @@ const P2PShare: React.FC = () => {
     const [transferProgress, setTransferProgress] = useState(0);
     const [currentSpeed, setCurrentSpeed] = useState(0);
     const [receivedFileUrl, setReceivedFileUrl] = useState<string | null>(null);
-    const [receivedMeta, setReceivedMeta] = useState<{ name: string, size: number, mime: string } | null>(null);
+    const [receivedMeta, setReceivedMeta] = useState<{ name: string, size: number, mime: string, isEncrypted?: boolean } | null>(null);
     const [showPreview, setShowPreview] = useState(false);
     const [previewFile, setPreviewFile] = useState<File | null>(null);
     const [showQR, setShowQR] = useState(false);
     const [encryptFile, setEncryptFile] = useState(false);
     const [filePassword, setFilePassword] = useState('');
+    const [decryptPassword, setDecryptPassword] = useState('');
+    const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+
+    // Queue State
+    const [fileQueue, setFileQueue] = useState<QueuedFile[]>([]);
+    const [currentTransferId, setCurrentTransferId] = useState<string | null>(null);
+    const [isPaused, setIsPaused] = useState(false);
 
     // AI Analysis State
     const [aiAnalysis, setAiAnalysis] = useState<Record<string, any>>({});
@@ -73,6 +82,16 @@ const P2PShare: React.FC = () => {
     const receivedSizeRef = useRef(0);
     const transferStartTimeRef = useRef<number>(0);
     const chatEndRef = useRef<HTMLDivElement>(null);
+
+    // Sync queue state
+    useEffect(() => {
+        const handleQueueUpdate = () => {
+            setFileQueue(transferQueueService.getAllFiles());
+        };
+
+        transferQueueService.on(handleQueueUpdate);
+        return () => transferQueueService.off(handleQueueUpdate);
+    }, []);
 
     useEffect(() => {
         const initPeer = () => {
@@ -224,15 +243,38 @@ const P2PShare: React.FC = () => {
         handleConnection(conn);
     };
 
+    // Store encryption metadata temporarily
+    const encryptionMetaRef = useRef<{ salt: string, iv: string, originalMime: string, originalName: string } | null>(null);
+
     const handleData = (data: any) => {
-        if (data.type === 'meta') {
+        if (data.type === 'encryption-meta') {
+            // Store encryption metadata for later decryption
+            encryptionMetaRef.current = {
+                salt: data.salt,
+                iv: data.iv,
+                originalMime: data.originalMime,
+                originalName: data.originalName
+            };
+            addLog('Encrypted file incoming - password will be required');
+        } else if (data.type === 'meta') {
             receivedChunksRef.current = [];
             receivedSizeRef.current = 0;
-            setReceivedMeta({ name: data.name, size: data.size, mime: data.mime });
+            setReceivedMeta({
+            name: data.name,
+            size: data.size,
+            mime: data.mime,
+            isEncrypted: data.isEncrypted
+        });
+        if (data.username) setPeerUsername(data.username);
             setTransferProgress(0);
-            addLog(`Receiving stream: ${data.name}`);
+            addLog(`Receiving stream: ${data.name}${data.isEncrypted ? ' (Encrypted)' : ''}`);
             addSystemMessage(`Incoming data stream: ${data.name}`);
             transferStartTimeRef.current = Date.now();
+
+            // Show password prompt if encrypted
+            if (data.isEncrypted) {
+                setShowPasswordPrompt(true);
+            }
         } else if (data.type === 'chunk') {
             receivedChunksRef.current.push(data.data);
             receivedSizeRef.current += data.data.byteLength;
@@ -248,16 +290,26 @@ const P2PShare: React.FC = () => {
             addLog('Transfer complete. Reassembling...');
             addSystemMessage('Data stream verified. Transfer complete.');
             const blob = new Blob(receivedChunksRef.current, { type: receivedMeta?.mime || 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
-            setReceivedFileUrl(url);
 
-            // Create a file object with correct metadata for preview
-            if (receivedMeta) {
-                const receivedFile = new File([blob], receivedMeta.name, {
-                    type: receivedMeta.mime,
-                    lastModified: Date.now()
-                });
-                setPreviewFile(receivedFile);
+            // If encrypted, we'll decrypt when user provides password
+            if (receivedMeta?.isEncrypted) {
+                // Store encrypted blob temporarily
+                const url = URL.createObjectURL(blob);
+                setReceivedFileUrl(url);
+                setShowPasswordPrompt(true);
+                addSystemMessage('File received. Enter password to decrypt.');
+            } else {
+                const url = URL.createObjectURL(blob);
+                setReceivedFileUrl(url);
+
+                // Create a file object with correct metadata for preview
+                if (receivedMeta) {
+                    const receivedFile = new File([blob], receivedMeta.name, {
+                        type: receivedMeta.mime,
+                        lastModified: Date.now()
+                    });
+                    setPreviewFile(receivedFile);
+                }
             }
 
             setTransferProgress(100);
@@ -283,6 +335,71 @@ const P2PShare: React.FC = () => {
             if (activeTab !== 'chat') {
                 setUnreadCount(prev => prev + 1);
             }
+        } else if (data.type === 'clipboard') {
+            // Handle incoming clipboard sync
+            addLog(`Clipboard received from peer: ${data.text.substring(0, 50)}...`);
+            addSystemMessage('Peer sent clipboard content');
+
+            // Show notification with option to copy
+            if (confirm(`Peer shared clipboard:\n\n"${data.text.substring(0, 100)}${data.text.length > 100 ? '...' : ''}"\n\nCopy to your clipboard?`)) {
+                navigator.clipboard.writeText(data.text).then(() => {
+                    notificationService.showToast({ type: 'success', message: 'Copied to clipboard!' });
+                    audioService.playSound('success');
+                }).catch((err) => {
+                    console.error('Clipboard write failed:', err);
+                    notificationService.showToast({ type: 'error', message: 'Failed to copy to clipboard' });
+                });
+            }
+        }
+    };
+
+    // Decrypt received file
+    const decryptReceivedFile = async () => {
+        if (!receivedFileUrl || !receivedMeta || !decryptPassword) {
+            notificationService.showToast({ type: 'error', message: 'Missing file or password' });
+            return;
+        }
+
+        try {
+            addLog('Decrypting file...');
+
+            // Fetch the encrypted blob
+            const response = await fetch(receivedFileUrl);
+            const encryptedBlob = await response.blob();
+
+            if (!encryptionMetaRef.current) {
+                throw new Error('Encryption metadata not found');
+            }
+
+            // Create encrypted file object
+            const encryptedFileData = {
+                encryptedData: await encryptedBlob.arrayBuffer(),
+                salt: encryptionMetaRef.current.salt,
+                iv: encryptionMetaRef.current.iv,
+                fileName: encryptionMetaRef.current.originalName,
+                mimeType: encryptionMetaRef.current.originalMime,
+                originalSize: receivedMeta.size
+            };
+
+            // Decrypt
+            const decryptedFile = await encryptionService.decryptFile(encryptedFileData, decryptPassword);
+
+            // Create new URL for decrypted file
+            const decryptedUrl = URL.createObjectURL(decryptedFile);
+            setReceivedFileUrl(decryptedUrl);
+            setPreviewFile(decryptedFile);
+            setShowPasswordPrompt(false);
+            setDecryptPassword('');
+
+            addLog('File decrypted successfully!');
+            addSystemMessage('Decryption complete.');
+            audioService.playSound('success');
+            notificationService.showToast({ type: 'success', message: 'File decrypted successfully!' });
+
+        } catch (error: any) {
+            console.error('Decryption failed:', error);
+            addLog(`Decryption failed: ${error.message}`);
+            notificationService.showToast({ type: 'error', message: 'Decryption failed - wrong password?' });
         }
     };
 
@@ -298,101 +415,205 @@ const P2PShare: React.FC = () => {
     const sendFile = async () => {
         if (files.length === 0 || !connRef.current) return;
 
-        // Currently handles sending the first file only from the list to maintain simple P2P logic for now
-        // TODO: Upgrade to queue-based sending for multiple files
-        const file = files[0];
+        // Add files to queue
+        files.forEach((file) => {
+            transferQueueService.addFile(file, encryptFile, filePassword);
+        });
 
-        addLog(`Starting upload: ${file.name}`);
+        // Clear file selection
+        setFiles([]);
+        setFilePassword('');
+
+        // Start processing queue
+        processQueue();
+    };
+
+    const processQueue = async () => {
+        const nextFile = transferQueueService.getNextFile();
+        if (!nextFile || !connRef.current) return;
+
+        const { id, file, encrypted, password } = nextFile;
+        setCurrentTransferId(id);
+        transferQueueService.startFile(id);
+
+        addLog(`Starting upload: ${file.name}${encrypted ? ' (Encrypted)' : ''}`);
         addSystemMessage(`Initiating upload: ${file.name} (${formatBytes(file.size)})`);
 
-        // Send Metadata
-        connRef.current.send({ type: 'meta', name: file.name, size: file.size, mime: file.type });
+        try {
+            let fileToSend = file;
+            let finalMime = file.type;
+            let finalSize = file.size;
+            let isEncrypted = false;
 
-        transferStartTimeRef.current = Date.now();
+            // Encrypt file if requested
+            if (encrypted && password) {
+                addLog('Encrypting file...');
+                const encryptedData = await encryptionService.encryptFile(file, password);
+                fileToSend = new File(
+                    [encryptedData.encryptedData],
+                    file.name,
+                    { type: 'application/octet-stream' }
+                );
+                finalMime = 'application/octet-stream';
+                finalSize = encryptedData.encryptedData.byteLength;
+                isEncrypted = true;
 
-        // Handle empty files immediately
-        if (file.size === 0) {
-            connRef.current.send({ type: 'end' });
-            addLog('Empty file sent successfully.');
-            addSystemMessage('Upload complete (Empty file).');
-            audioService.playSound('success');
-
-            // Save to history
-            storageService.saveTransfer({
-                id: generateUUID(),
-                peerId: connRef.current.peer,
-                fileName: file.name,
-                fileSize: 0,
-                timestamp: Date.now(),
-                direction: 'sent',
-                speed: 0,
-                success: true
-            });
-            return;
-        }
-
-        const reader = new FileReader();
-        let offset = 0;
-
-        reader.onerror = (err) => {
-            console.error("FileReader error:", err);
-            addLog(`Error reading file: ${reader.error?.message}`);
-            addSystemMessage('Upload failed: Read error.');
-            setConnectionStatus('error');
-        };
-
-        reader.onload = (e) => {
-            if (e.target?.result) {
-                const chunk = e.target.result as ArrayBuffer;
-
-                if (chunk.byteLength > 0) {
-                    connRef.current.send({ type: 'chunk', data: chunk });
-                }
-
-                offset += CHUNK_SIZE;
-                setTransferProgress(Math.min(100, Math.round((offset / file.size) * 100)));
-
-                // Calculate Speed
-                const elapsed = (Date.now() - transferStartTimeRef.current) / 1000;
-                if (elapsed > 0) {
-                    setCurrentSpeed(offset / elapsed);
-                }
-
-                if (offset < file.size) {
-                    readNextChunk();
-                } else {
-                    connRef.current.send({ type: 'end' });
-                    addLog('Upload successfully completed.');
-                    addSystemMessage('Upload complete.');
-                    setCurrentSpeed(0);
-                    audioService.playSound('success');
-
-                    // Save to history
-                    storageService.saveTransfer({
-                        id: generateUUID(),
-                        peerId: connRef.current.peer,
-                        fileName: file.name,
-                        fileSize: file.size,
-                        timestamp: Date.now(),
-                        direction: 'sent',
-                        speed: file.size / Math.max(0.001, (Date.now() - transferStartTimeRef.current) / 1000),
-                        success: true
-                    });
-                }
+                // Send encryption metadata
+                connRef.current.send({
+                    type: 'encryption-meta',
+                    salt: encryptedData.salt,
+                    iv: encryptedData.iv,
+                    originalMime: encryptedData.mimeType,
+                    originalName: encryptedData.fileName
+                });
             }
-        };
 
-        const readNextChunk = () => {
-            requestAnimationFrame(() => {
-                if (offset < file.size) {
-                    const slice = file.slice(offset, offset + CHUNK_SIZE);
-                    reader.readAsArrayBuffer(slice);
-                }
+            // Check for resumable transfer
+            const resumeState = resumableTransferService.findMatchingTransfer(
+                file.name,
+                file.size,
+                connRef.current.peer,
+                'send'
+            );
+
+            let offset = resumeState ? resumableTransferService.getResumeOffset(resumeState.transferId) : 0;
+
+            // Create or update transfer state
+            const transferState = resumeState || resumableTransferService.createTransferState(
+                file.name,
+                file.size,
+                file.type,
+                connRef.current.peer,
+                'send',
+                isEncrypted
+            );
+
+            // Send Metadata
+            connRef.current.send({
+                type: 'meta',
+                username: myUsername,
+                name: file.name,
+                size: finalSize,
+                mime: finalMime,
+                isEncrypted,
+                transferId: transferState.transferId,
+                resumeOffset: offset
             });
-        };
 
-        // Start reading
-        readNextChunk();
+            transferStartTimeRef.current = Date.now();
+
+            // Handle empty files immediately
+            if (finalSize === 0) {
+                connRef.current.send({ type: 'end' });
+                transferQueueService.completeFile(id);
+                addLog('Empty file sent successfully.');
+                addSystemMessage('Upload complete (Empty file).');
+                audioService.playSound('success');
+
+                storageService.saveTransfer({
+                    id: generateUUID(),
+                    peerId: connRef.current.peer,
+                    fileName: file.name,
+                    fileSize: 0,
+                    timestamp: Date.now(),
+                    direction: 'sent',
+                    speed: 0,
+                    success: true
+                });
+
+                resumableTransferService.removeTransferState(transferState.transferId);
+                processQueue(); // Process next file
+                return;
+            }
+
+            const reader = new FileReader();
+            let chunkIndex = Math.floor(offset / CHUNK_SIZE);
+
+            reader.onerror = (err) => {
+                console.error("FileReader error:", err);
+                addLog(`Error reading file: ${reader.error?.message}`);
+                addSystemMessage('Upload failed: Read error.');
+                transferQueueService.failFile(id, reader.error?.message || 'Read error');
+                resumableTransferService.removeTransferState(transferState.transferId);
+            };
+
+            reader.onload = (e) => {
+                if (e.target?.result && !isPaused) {
+                    const chunk = e.target.result as ArrayBuffer;
+
+                    if (chunk.byteLength > 0) {
+                        connRef.current.send({
+                            type: 'chunk',
+                            data: chunk,
+                            chunkIndex: chunkIndex
+                        });
+                    }
+
+                    offset += chunk.byteLength;
+                    chunkIndex++;
+
+                    const progress = Math.min(100, Math.round((offset / finalSize) * 100));
+                    setTransferProgress(progress);
+
+                    // Calculate Speed
+                    const elapsed = (Date.now() - transferStartTimeRef.current) / 1000;
+                    const speed = elapsed > 0 ? offset / elapsed : 0;
+                    setCurrentSpeed(speed);
+
+                    // Update queue and resumable state
+                    transferQueueService.updateProgress(id, offset, finalSize, speed);
+                    resumableTransferService.updateProgress(transferState.transferId, offset, chunkIndex);
+
+                    if (offset < finalSize) {
+                        readNextChunk();
+                    } else {
+                        connRef.current.send({ type: 'end' });
+                        transferQueueService.completeFile(id);
+                        addLog('Upload successfully completed.');
+                        addSystemMessage('Upload complete.');
+                        setCurrentSpeed(0);
+                        audioService.playSound('success');
+
+                        // Save to history
+                        storageService.saveTransfer({
+                            id: generateUUID(),
+                            peerId: connRef.current.peer,
+                            fileName: file.name,
+                            fileSize: file.size,
+                            timestamp: Date.now(),
+                            direction: 'sent',
+                            speed: finalSize / Math.max(0.001, (Date.now() - transferStartTimeRef.current) / 1000),
+                            success: true
+                        });
+
+                        resumableTransferService.removeTransferState(transferState.transferId);
+                        setCurrentTransferId(null);
+
+                        // Process next file in queue
+                        setTimeout(() => processQueue(), 100);
+                    }
+                }
+            };
+
+            const readNextChunk = () => {
+                if (isPaused) return;
+
+                requestAnimationFrame(() => {
+                    if (offset < finalSize) {
+                        const slice = fileToSend.slice(offset, offset + CHUNK_SIZE);
+                        reader.readAsArrayBuffer(slice);
+                    }
+                });
+            };
+
+            // Start reading
+            readNextChunk();
+
+        } catch (error: any) {
+            console.error('Send file error:', error);
+            addLog(`Upload failed: ${error.message}`);
+            transferQueueService.failFile(id, error.message);
+        }
     };
 
     const sendChatMessage = (text: string = chatInput) => {
@@ -404,6 +625,37 @@ const P2PShare: React.FC = () => {
         setChatHistory(prev => [...prev, { id: generateUUID(), sender: 'me', text: text, timestamp: Date.now() }]);
         setChatInput('');
         setQuickReplies([]);
+    };
+
+    // Clipboard sync feature
+    const syncClipboard = async () => {
+        if (!connRef.current) {
+            notificationService.showToast({ type: 'error', message: 'No active connection' });
+            return;
+        }
+
+        try {
+            const clipboardText = await navigator.clipboard.readText();
+            if (!clipboardText || clipboardText.trim() === '') {
+                notificationService.showToast({ type: 'info', message: 'Clipboard is empty' });
+                return;
+            }
+
+            // Send clipboard content
+            connRef.current.send({
+                type: 'clipboard',
+                text: clipboardText,
+                timestamp: Date.now()
+            });
+
+            addLog(`Clipboard synced: ${clipboardText.substring(0, 50)}...`);
+            addSystemMessage('Clipboard content sent to peer');
+            audioService.playSound('success');
+            notificationService.showToast({ type: 'success', message: 'Clipboard synced!' });
+        } catch (error) {
+            console.error('Clipboard read failed:', error);
+            notificationService.showToast({ type: 'error', message: 'Failed to read clipboard' });
+        }
     };
 
     const handleAiAssist = async () => {
@@ -419,37 +671,84 @@ const P2PShare: React.FC = () => {
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             const newFiles = Array.from(e.target.files);
-            setFiles(prev => [...prev, ...newFiles]);
+            processNewFiles(newFiles);
+        }
+    };
 
-            // Trigger AI Analysis for each new file
-            newFiles.forEach(async (file) => {
-                const fileId = `${file.name}-${file.size}`;
-                setAnalyzingFiles(prev => ({ ...prev, [fileId]: true }));
+    //Handle folder drag and drop
+    const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
 
-                try {
-                    let analysis;
-                    if (file.type.startsWith('image/')) {
-                        // Convert to base64 for vision API
-                        const reader = new FileReader();
-                        reader.onloadend = async () => {
-                            const base64 = reader.result as string;
-                            analysis = await geminiService.analyzeImage(base64);
-                            setAiAnalysis(prev => ({ ...prev, [fileId]: analysis }));
-                            setAnalyzingFiles(prev => ({ ...prev, [fileId]: false }));
-                        };
-                        reader.readAsDataURL(file);
-                    } else {
-                        // Standard metadata analysis
-                        analysis = await geminiService.analyzeFile(file);
+        const items = e.dataTransfer.items;
+        const newFiles: File[] = [];
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i].webkitGetAsEntry();
+            if (item) {
+                await traverseFileTree(item, '', newFiles);
+            }
+        }
+
+        if (newFiles.length > 0) {
+            processNewFiles(newFiles);
+        }
+    };
+
+    // Traverse directory tree recursively
+    const traverseFileTree = async (item: any, path: string, files: File[]): Promise<void> => {
+        return new Promise((resolve) => {
+            if (item.isFile) {
+                item.file((file: File) => {
+                    // Create new file with path info
+                    const newFile = new File([file], path + file.name, { type: file.type });
+                    files.push(newFile);
+                    resolve();
+                });
+            } else if (item.isDirectory) {
+                const dirReader = item.createReader();
+                dirReader.readEntries(async (entries: any[]) => {
+                    for (const entry of entries) {
+                        await traverseFileTree(entry, path + item.name + '/', files);
+                    }
+                    resolve();
+                });
+            }
+        });
+    };
+
+    // Process new files (common for both file input and drag-drop)
+    const processNewFiles = (newFiles: File[]) => {
+        setFiles(prev => [...prev, ...newFiles]);
+
+        // Trigger AI Analysis for each new file
+        newFiles.forEach(async (file) => {
+            const fileId = `${file.name}-${file.size}`;
+            setAnalyzingFiles(prev => ({ ...prev, [fileId]: true }));
+
+            try {
+                let analysis;
+                if (file.type.startsWith('image/')) {
+                    // Convert to base64 for vision API
+                    const reader = new FileReader();
+                    reader.onloadend = async () => {
+                        const base64 = reader.result as string;
+                        analysis = await geminiService.analyzeImage(base64);
                         setAiAnalysis(prev => ({ ...prev, [fileId]: analysis }));
                         setAnalyzingFiles(prev => ({ ...prev, [fileId]: false }));
-                    }
-                } catch (err) {
-                    console.error("AI Analysis failed", err);
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    // Standard metadata analysis
+                    analysis = await geminiService.analyzeFile(file);
+                    setAiAnalysis(prev => ({ ...prev, [fileId]: analysis }));
                     setAnalyzingFiles(prev => ({ ...prev, [fileId]: false }));
                 }
-            });
-        }
+            } catch (err) {
+                console.error("AI Analysis failed", err);
+                setAnalyzingFiles(prev => ({ ...prev, [fileId]: false }));
+            }
+        });
     };
 
     const removeFile = (index: number) => {
@@ -713,12 +1012,18 @@ const P2PShare: React.FC = () => {
                                 {mode === 'send' ? (
                                     <div className="space-y-6 animate-fadeIn">
                                         {files.length === 0 ? (
-                                            <div onClick={() => fileInputRef.current?.click()} className="h-64 border-2 border-dashed border-[#333] hover:border-[#00f3ff] hover:bg-[#00f3ff]/5 rounded-xl flex flex-col items-center justify-center cursor-pointer group transition-all duration-300">
+                                            <div
+                                                onClick={() => fileInputRef.current?.click()}
+                                                onDrop={handleDrop}
+                                                onDragOver={(e) => e.preventDefault()}
+                                                onDragEnter={(e) => e.preventDefault()}
+                                                className="h-64 border-2 border-dashed border-[#333] hover:border-[#00f3ff] hover:bg-[#00f3ff]/5 rounded-xl flex flex-col items-center justify-center cursor-pointer group transition-all duration-300"
+                                            >
                                                 <div className="w-20 h-20 rounded-full bg-[#222] group-hover:bg-[#00f3ff]/20 flex items-center justify-center mb-6 transition-colors">
                                                     <UploadCloud size={32} className="text-gray-400 group-hover:text-[#00f3ff] transition-colors" />
                                                 </div>
                                                 <span className="font-display text-lg text-gray-400 group-hover:text-white tracking-wide">SELECT DATA PACKET</span>
-                                                <span className="font-mono text-xs text-[#00f3ff] mt-2 opacity-0 group-hover:opacity-100 transition-opacity">CLICK TO BROWSE</span>
+                                                <span className="font-mono text-xs text-[#00f3ff] mt-2 opacity-0 group-hover:opacity-100 transition-opacity">CLICK OR DROP FILES/FOLDERS</span>
                                                 <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileChange} />
                                             </div>
                                         ) : (
@@ -771,8 +1076,33 @@ const P2PShare: React.FC = () => {
                                                     );
                                                 })}
 
-                                                <button onClick={sendFile} className="w-full py-4 bg-[#00f3ff] text-black font-bold font-display tracking-widest hover:bg-[#00c2cc] transition-colors rounded-lg flex items-center justify-center gap-3">
-                                                    <Send size={20} /> INITIATE TRANSFER ({files.length})
+                                                {/* Encryption Controls */}
+                                                <div className="bg-[#0a0a15] border border-[#00f3ff]/20 rounded-lg p-4 space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            {encryptFile ? <Lock size={16} className="text-[#00f3ff]" /> : <Unlock size={16} className="text-gray-500" />}
+                                                            <span className="text-xs font-mono uppercase tracking-wider text-gray-400">Encryption</span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setEncryptFile(!encryptFile)}
+                                                            className={`px-3 py-1 rounded text-xs font-bold transition-all ${encryptFile ? 'bg-[#00f3ff] text-black' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                                                        >
+                                                            {encryptFile ? 'ENABLED' : 'DISABLED'}
+                                                        </button>
+                                                    </div>
+                                                    {encryptFile && (
+                                                        <input
+                                                            type="password"
+                                                            value={filePassword}
+                                                            onChange={(e) => setFilePassword(e.target.value)}
+                                                            placeholder="Enter encryption password..."
+                                                            className="w-full bg-black border border-[#00f3ff]/30 rounded px-3 py-2 text-sm text-white font-mono placeholder-gray-600 focus:border-[#00f3ff] outline-none"
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                <button onClick={sendFile} disabled={encryptFile && !filePassword} className="w-full py-4 bg-[#00f3ff] text-black font-bold font-display tracking-widest hover:bg-[#00c2cc] transition-colors rounded-lg flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    <Send size={20} /> {encryptFile ? 'ENCRYPT & TRANSFER' : 'INITIATE TRANSFER'} ({files.length})
                                                 </button>
                                             </div>
                                         )}
@@ -788,7 +1118,18 @@ const P2PShare: React.FC = () => {
                                                     <a href={receivedFileUrl} download={receivedMeta?.name} className="flex items-center gap-2 bg-[#bc13fe] text-white px-6 py-3 rounded hover:bg-[#a010d8] transition-colors font-bold">
                                                         <Download size={20} /> SAVE FILE
                                                     </a>
-                                                    <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 bg-[#222] text-white px-6 py-3 rounded hover:bg-[#333] transition-colors border border-[#333]">
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (receivedFileUrl && receivedMeta) {
+                                                                const response = await fetch(receivedFileUrl);
+                                                                const blob = await response.blob();
+                                                                const file = new File([blob], receivedMeta.name, { type: receivedMeta.mime });
+                                                                setPreviewFile(file);
+                                                                setShowPreview(true);
+                                                            }
+                                                        }}
+                                                        className="flex items-center gap-2 bg-[#222] text-white px-6 py-3 rounded hover:bg-[#333] transition-colors border border-[#333]"
+                                                    >
                                                         <Eye size={20} /> PREVIEW
                                                     </button>
                                                 </div>
@@ -806,13 +1147,46 @@ const P2PShare: React.FC = () => {
                                 {/* Progress Bar */}
                                 {(transferProgress > 0 && transferProgress < 100) && (
                                     <div className="mt-8">
-                                        <div className="flex justify-between text-xs font-mono text-gray-400 mb-2">
+                                        <div className="flex justify-between items-center text-xs font-mono text-gray-400 mb-2">
                                             <span>TRANSFER_STATUS</span>
-                                            <span>{transferProgress}%</span>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-[#00f3ff]">{formatBytes(currentSpeed)}/s</span>
+                                                <span>{transferProgress}%</span>
+                                            </div>
                                         </div>
-                                        <div className="h-2 bg-[#222] rounded-full overflow-hidden">
+                                        <div className="h-2 bg-[#222] rounded-full overflow-hidden mb-3">
                                             <div className="h-full bg-gradient-to-r from-[#00f3ff] to-[#bc13fe] transition-all duration-300" style={{ width: `${transferProgress}%` }}></div>
                                         </div>
+                                        {/* Pause/Resume Controls */}
+                                        {mode === 'send' && currentTransferId && (
+                                            <div className="flex gap-2 justify-center">
+                                                <button
+                                                    onClick={() => setIsPaused(!isPaused)}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-[#222] border border-[#00f3ff]/30 text-[#00f3ff] rounded hover:bg-[#00f3ff]/10 transition-colors text-xs font-mono uppercase"
+                                                >
+                                                    {isPaused ? (
+                                                        <><Play size={14} /> RESUME</>
+                                                    ) : (
+                                                        <><Pause size={14} /> PAUSE</>
+                                                    )}
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (currentTransferId) {
+                                                            transferQueueService.cancelFile(currentTransferId);
+                                                            setCurrentTransferId(null);
+                                                            setIsPaused(false);
+                                                            setTransferProgress(0);
+                                                            setCurrentSpeed(0);
+                                                            resetTransfer();
+                                                        }
+                                                    }}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-[#222] border border-[#ff0055]/30 text-[#ff0055] rounded hover:bg-[#ff0055]/10 transition-colors text-xs font-mono uppercase"
+                                                >
+                                                    <XCircle size={14} /> CANCEL
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -833,6 +1207,50 @@ const P2PShare: React.FC = () => {
                         fileUrl={receivedFileUrl || undefined}
                         fileSize={receivedMeta?.size}
                     />
+                )}
+
+                {/* Password Decryption Modal */}
+                {showPasswordPrompt && receivedMeta?.isEncrypted && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
+                        <div className="bg-[#0a0a15] border-2 border-[#bc13fe] rounded-xl p-8 max-w-md w-full mx-4 shadow-[0_0_50px_rgba(188,19,254,0.5)] animate-scaleIn">
+                            <div className="flex items-center gap-3 mb-6">
+                                <Lock size={32} className="text-[#bc13fe]" />
+                                <h3 className="text-2xl font-bold text-white font-display">ENCRYPTED FILE</h3>
+                            </div>
+                            <p className="text-gray-400 mb-6 font-mono text-sm">
+                                This file is encrypted. Enter the password to decrypt and view.
+                            </p>
+                            <div className="space-y-4">
+                                <input
+                                    type="password"
+                                    value={decryptPassword}
+                                    onChange={(e) => setDecryptPassword(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && decryptReceivedFile()}
+                                    placeholder="Enter decryption password..."
+                                    autoFocus
+                                    className="w-full bg-black border border-[#bc13fe]/50 rounded px-4 py-3 text-white font-mono placeholder-gray-600 focus:border-[#bc13fe] outline-none"
+                                />
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={decryptReceivedFile}
+                                        disabled={!decryptPassword}
+                                        className="flex-1 bg-[#bc13fe] text-white px-6 py-3 rounded font-bold hover:bg-[#a010d8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        <Unlock size={20} /> DECRYPT
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowPasswordPrompt(false);
+                                            setDecryptPassword('');
+                                        }}
+                                        className="px-6 py-3 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
+                                    >
+                                        CANCEL
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

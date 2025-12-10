@@ -4,6 +4,7 @@ import { ChatMessage, VoiceRecording } from '../types';
 import CyberpunkEmojiPicker from './shared/EmojiPicker';
 import { audioService } from '../services/audioService';
 import { notificationService } from '../services/notificationService';
+import { storageService } from '../services/storageService';
 import { geminiService } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -35,6 +36,8 @@ const CommunicationHub: React.FC = () => {
     const [isRecordingVoice, setIsRecordingVoice] = useState(false);
     const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
     const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const [myUsername, setMyUsername] = useState<string>('');
+    const [peerUsername, setPeerUsername] = useState<string>('');
     const [activeTab, setActiveTab] = useState<'chat' | 'whiteboard'>('chat');
     const [isTyping, setIsTyping] = useState(false);
     const [peerTyping, setPeerTyping] = useState(false);
@@ -97,8 +100,11 @@ const CommunicationHub: React.FC = () => {
 
                 peer.on('call', (call: any) => {
                     setCallStatus('incoming');
-                    addLog(`Incoming call from ${call.peer}`);
+                    const callerName = call.metadata?.username ? `${call.metadata.username} (${call.peer})` : call.peer;
+                    addLog(`Incoming call from ${callerName}`);
                     currentCallRef.current = call;
+                    audioService.playSound('receive'); // Incoming call sound
+                    notificationService.showToast({ type: 'info', message: `Incoming call from ${callerName}` });
                 });
 
                 peer.on('connection', (conn: any) => {
@@ -193,7 +199,9 @@ const CommunicationHub: React.FC = () => {
 
         const call = currentCallRef.current;
         call.answer(localStreamRef.current);
+        if (call.metadata?.username) setPeerUsername(call.metadata.username);
         setCallStatus('connected');
+        audioService.playSound('connect'); // Call connected sound
 
         call.on('stream', (remoteStream: MediaStream) => {
             remoteStreamRef.current = remoteStream;
@@ -251,6 +259,7 @@ const CommunicationHub: React.FC = () => {
         if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = null;
         }
+        audioService.playSound('disconnect'); // Call ended sound
         addLog("Call ended");
     };
 

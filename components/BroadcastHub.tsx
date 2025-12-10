@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Radio, Users, Send, RefreshCw, Globe, Settings, X, Save, AlertTriangle, MessageSquare, Bot, Sparkles, Languages, FileText, Wand2, Loader2 } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
+import { storageService } from '../services/storageService';
 
 declare const Peer: any;
 
@@ -55,6 +56,7 @@ const BroadcastHub: React.FC = () => {
     const [quickReplies, setQuickReplies] = useState<string[]>([]);
     const [aiLoading, setAiLoading] = useState(false);
     const [summary, setSummary] = useState<string | null>(null);
+    const [myUsername, setMyUsername] = useState<string>('');
 
     // Settings State
     const [showSettings, setShowSettings] = useState(false);
@@ -146,11 +148,12 @@ const BroadcastHub: React.FC = () => {
                         if (data.type === 'broadcast') {
                             addLog(`📢 BROADCAST from ${conn.peer}: ${data.text}`);
 
+                            const displayName = data.username ? `${data.username} (${conn.peer})` : conn.peer;
                             const newMessage: ChatMessage = {
                                 id: generateUUID(),
                                 text: data.text,
                                 sender: 'peer',
-                                from: conn.peer,
+                                from: displayName,
                                 timestamp: Date.now()
                             };
 
@@ -190,6 +193,13 @@ const BroadcastHub: React.FC = () => {
             }
         };
     }, [settings]);
+
+    // Get username from settings
+    useEffect(() => {
+        const username = storageService.getSettings().username || '';
+        setMyUsername(username);
+    }, []);
+
 
     const addLog = (msg: string) => {
         setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev.slice(0, 50)]);
@@ -233,7 +243,7 @@ const BroadcastHub: React.FC = () => {
                 if (!peerRef.current) return resolve();
                 const conn = peerRef.current.connect(peerId);
                 conn.on('open', () => {
-                    conn.send({ type: 'broadcast', text: text, from: myId });
+                    conn.send({ type: 'broadcast', text: text, from: myId, username: myUsername });
                     setTimeout(() => { conn.close(); resolve(); }, 1000);
                 });
                 conn.on('error', resolve);
@@ -374,9 +384,10 @@ const BroadcastHub: React.FC = () => {
                 <div className="bg-[#050510]/95 border border-[#bc13fe]/30 p-6 rounded-xl backdrop-blur-xl shadow-[0_0_30px_rgba(188,19,254,0.1)]">
                     <h3 className="text-[#bc13fe] font-display font-bold mb-4 flex items-center gap-2"><Radio size={18} /> TRANSMITTER</h3>
                     <div className="flex gap-4">
-                        <input type="text" value={message} onChange={e => setMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && broadcastMessage()} placeholder="Broadcast global message..." className="flex-1 bg-black/80 border border-[#bc13fe]/30 rounded px-4 py-3 text-white font-mono placeholder-[#bc13fe]/30 focus:border-[#bc13fe] outline-none transition-colors" />
-                        <button onClick={() => broadcastMessage()} disabled={isBroadcasting} className="bg-[#bc13fe] text-white px-6 py-3 rounded font-bold hover:bg-[#a010d6] transition-all flex items-center gap-2">
-                            <Send size={18} /> SEND
+                        <input type="text" value={message} onChange={e => setMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && !isBroadcasting && broadcastMessage()} placeholder="Broadcast global message..." className="flex-1 bg-black/80 border border-[#bc13fe]/30 rounded px-4 py-3 text-white font-mono placeholder-[#bc13fe]/30 focus:border-[#bc13fe] outline-none transition-colors" disabled={isBroadcasting} />
+                        <button onClick={() => broadcastMessage()} disabled={isBroadcasting || !message.trim()} className="bg-[#bc13fe] text-white px-6 py-3 rounded font-bold hover:bg-[#a010d6] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isBroadcasting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                            {isBroadcasting ? 'SENDING...' : 'SEND'}
                         </button>
                     </div>
                 </div>
@@ -488,10 +499,10 @@ const BroadcastHub: React.FC = () => {
                         />
                         <button
                             onClick={() => broadcastMessage()}
-                            disabled={!message.trim()}
+                            disabled={!message.trim() || isBroadcasting}
                             className="text-[#00f3ff] hover:bg-[#00f3ff]/10 p-2 rounded transition-colors disabled:opacity-50"
                         >
-                            <Send size={18} />
+                            {isBroadcasting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                         </button>
                     </div>
                 </div>

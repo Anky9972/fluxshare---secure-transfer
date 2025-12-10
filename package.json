@@ -7,7 +7,10 @@
     "dev": "concurrently \"npm run peer-server\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
-    "peer-server": "node server/peer-server.cjs"
+    "peer-server": "node server/peer-server.cjs",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
@@ -37,10 +40,15 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
+    "@vitest/ui": "^4.0.15",
     "concurrently": "^9.2.1",
+    "happy-dom": "^20.0.11",
     "peer": "^1.0.2",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^4.0.15"
   }
 }

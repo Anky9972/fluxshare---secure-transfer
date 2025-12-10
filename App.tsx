@@ -1,11 +1,12 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Shield, Radio, Cpu, Zap, Crosshair, Terminal, Activity, Users, Settings } from 'lucide-react';
+import { Shield, Radio, Cpu, Zap, Crosshair, Terminal, Activity, Users, Settings, Clipboard } from 'lucide-react';
 import SFTPManager from './components/SFTPManager';
 import P2PShare from './components/P2PShare';
 import CommunicationHub from './components/CommunicationHub';
 import BroadcastHub from './components/BroadcastHub';
+import ClipSync from './components/ClipSync';
 import Header from './components/Header';
 import InteractiveBackground from './components/InteractiveBackground';
 import ToastContainer from './components/shared/ToastContainer';
@@ -18,7 +19,8 @@ enum Tab {
   SFTP = 'SFTP',
   P2P = 'P2P',
   COMMUNICATION = 'COMMUNICATION',
-  BROADCAST = 'BROADCAST'
+  BROADCAST = 'BROADCAST',
+  CLIPSYNC = 'CLIPSYNC'
 }
 
 const App: React.FC = () => {
@@ -128,6 +130,23 @@ const App: React.FC = () => {
               <span>Broadcast</span>
             </div>
           </button>
+
+          <button
+            onClick={() => setActiveTab(Tab.CLIPSYNC)}
+            className={`
+              relative px-6 md:px-8 py-3 font-display text-base md:text-lg font-medium uppercase tracking-widest transition-all duration-300
+              group overflow-hidden border w-full md:w-auto
+              ${activeTab === Tab.CLIPSYNC
+                ? 'bg-[#f3ff00]/10 border-[#f3ff00] text-[#f3ff00] shadow-[0_0_20px_rgba(243,255,0,0.2)]'
+                : 'bg-transparent border-[#333] text-gray-500 hover:text-white hover:border-white'}
+            `}
+            style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
+          >
+            <div className="flex items-center justify-center md:justify-start gap-3 relative z-10">
+              <Clipboard size={18} />
+              <span>Clip Sync</span>
+            </div>
+          </button>
         </div>
 
         {/* Content Area */}
@@ -136,6 +155,7 @@ const App: React.FC = () => {
           {activeTab === Tab.P2P && <P2PShare />}
           {activeTab === Tab.COMMUNICATION && <CommunicationHub />}
           {activeTab === Tab.BROADCAST && <BroadcastHub />}
+          {activeTab === Tab.CLIPSYNC && <ClipSync />}
         </div>
 
       </main>

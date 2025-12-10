@@ -217,3 +217,20 @@ export interface ToastMessage {
   message: string;
   duration?: number;
 }
+
+// Clipboard Types
+export interface ClipboardItem {
+  id: string;
+  text: string;
+  category: 'text' | 'code' | 'url' | 'other';
+  language?: string;
+  isPinned: boolean;
+  timestamp: number;
+  charCount: number;
+}
+
+export interface ClipboardStats {
+  totalClips: number;
+  pinnedCount: number;
+  todayCount: number;
+}
