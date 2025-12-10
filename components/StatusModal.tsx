@@ -60,8 +60,8 @@ const StatusModal: React.FC<StatusModalProps> = ({ isOpen, onClose }) => {
     );
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-[#050510] border border-[#bc13fe]/30 rounded-xl max-w-2xl w-full shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+            <div className="bg-[#050510]/95 border border-[#bc13fe]/30 rounded-xl max-w-2xl w-full shadow-[0_0_50px_rgba(188,19,254,0.2)] backdrop-blur-xl">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-[#bc13fe]/30 bg-[#bc13fe]/5">
                     <div className="flex items-center gap-3">
@@ -131,9 +131,9 @@ const StatusModal: React.FC<StatusModalProps> = ({ isOpen, onClose }) => {
                             QUICK TIPS
                         </h4>
                         <ul className="text-xs text-gray-400 space-y-1">
-                            <li>• For video calls, allow camera/microphone permissions</li>
-                            <li>• Use HTTPS for WebRTC in production</li>
-                            <li>• Check firewall if P2P connections fail</li>
+                            <li>• For secure visual comms, grant sensor access</li>
+                            <li>• Secure Channel (HTTPS) recommended for max encryption</li>
+                            <li>• Verify network clearance (Firewall) if stream fails</li>
                         </ul>
                     </section>
                 </div>

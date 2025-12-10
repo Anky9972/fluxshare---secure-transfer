@@ -10,8 +10,8 @@ const DocsModal: React.FC<DocsModalProps> = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-[#050510] border border-[#00f3ff]/30 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+            <div className="bg-[#050510]/95 border border-[#00f3ff]/30 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-[0_0_50px_rgba(0,243,255,0.15)] backdrop-blur-xl">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-[#00f3ff]/30 bg-[#00f3ff]/5">
                     <div className="flex items-center gap-3">
@@ -133,16 +133,16 @@ const DocsModal: React.FC<DocsModalProps> = ({ isOpen, onClose }) => {
                         </h3>
                         <div className="space-y-2 text-sm">
                             <div className="bg-red-500/10 border border-red-500/30 rounded p-3">
-                                <p className="font-bold text-red-400 mb-1">Connection Issues</p>
-                                <p className="text-xs text-gray-400">Check firewall, verify peers online, use TURN servers</p>
+                                <p className="font-bold text-red-400 mb-1">Signal Lost / Connection Failed</p>
+                                <p className="text-xs text-gray-400">Verify network clearance (Firewall), ensure peers are active, or try alternative relay nodes.</p>
                             </div>
                             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
-                                <p className="font-bold text-yellow-400 mb-1">Video Not Working</p>
-                                <p className="text-xs text-gray-400">Allow camera/mic permissions, use HTTPS, try Chrome/Firefox</p>
+                                <p className="font-bold text-yellow-400 mb-1">Visual Feed Offline</p>
+                                <p className="text-xs text-gray-400">Grant sensor access (Camera/Mic). Use a Secure Channel (HTTPS) for encrypted transmission.</p>
                             </div>
                             <div className="bg-orange-500/10 border border-orange-500/30 rounded p-3">
-                                <p className="font-bold text-orange-400 mb-1">No Peers Found</p>
-                                <p className="text-xs text-gray-400">Run: npm run peer-server, check port 9000</p>
+                                <p className="font-bold text-orange-400 mb-1">Peer Discovery Failed</p>
+                                <p className="text-xs text-gray-400">Check signal range (Peer Server connection) and verify port availability.</p>
                             </div>
                         </div>
                     </section>
@@ -154,10 +154,10 @@ const DocsModal: React.FC<DocsModalProps> = ({ isOpen, onClose }) => {
                             SECURITY
                         </h3>
                         <ul className="text-sm text-gray-400 space-y-1">
-                            <li>• WebRTC encryption for all P2P communications</li>
-                            <li>• No data storage - files transfer directly</li>
-                            <li>• Local processing - no server-side handling</li>
-                            <li>• HTTPS enforced in production</li>
+                            <li>• End-to-end encryption for all neural links (P2P)</li>
+                            <li>• Zero-knowledge transfer - data flows directly</li>
+                            <li>• Client-side processing only - no central mainframe storage</li>
+                            <li>• Secure Channel (HTTPS) enforced for verified protocols</li>
                         </ul>
                     </section>
                 </div>

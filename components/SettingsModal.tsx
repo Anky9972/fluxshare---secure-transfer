@@ -103,8 +103,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const themes = storageService.getAvailableThemes();
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="bg-[#050510] border-2 border-[#00f3ff] rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-2xl"
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fadeIn">
+            <div className="bg-[#050510]/95 border-2 border-[#00f3ff] rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-[0_0_60px_rgba(0,243,255,0.2)] backdrop-blur-xl"
                 style={{
                     clipPath: 'polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px)'
                 }}
@@ -134,8 +134,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                             key={tab}
                             onClick={() => setActiveTab(tab)}
                             className={`flex-1 px-4 py-3 text-sm font-medium uppercase tracking-wider transition-all ${activeTab === tab
-                                    ? 'text-[#00f3ff] border-b-2 border-[#00f3ff] bg-[#00f3ff]/10'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                ? 'text-[#00f3ff] border-b-2 border-[#00f3ff] bg-[#00f3ff]/10'
+                                : 'text-gray-500 hover:text-white hover:bg-white/5'
                                 }`}
                         >
                             {tab.replace('_', ' ')}
@@ -219,8 +219,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                                             key={theme.id}
                                             onClick={() => handleThemeChange(theme.id)}
                                             className={`p-4 rounded-lg border-2 transition-all ${settings.theme.id === theme.id
-                                                    ? 'border-[#00f3ff] bg-[#00f3ff]/10'
-                                                    : 'border-[#333] bg-[#0a0a1a] hover:border-[#00f3ff]/50'
+                                                ? 'border-[#00f3ff] bg-[#00f3ff]/10'
+                                                : 'border-[#333] bg-[#0a0a1a] hover:border-[#00f3ff]/50'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3 mb-2">
@@ -245,8 +245,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                                             key={pattern}
                                             onClick={() => saveSetting('backgroundPattern', pattern)}
                                             className={`p-4 rounded-lg border-2 capitalize transition-all ${settings.backgroundPattern === pattern
-                                                    ? 'border-[#bc13fe] bg-[#bc13fe]/10 text-[#bc13fe]'
-                                                    : 'border-[#333] bg-[#0a0a1a] text-gray-400 hover:border-[#bc13fe]/50'
+                                                ? 'border-[#bc13fe] bg-[#bc13fe]/10 text-[#bc13fe]'
+                                                : 'border-[#333] bg-[#0a0a1a] text-gray-400 hover:border-[#bc13fe]/50'
                                                 }`}
                                         >
                                             {pattern}
@@ -387,7 +387,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-[#333] p-4 bg-[#0a0a1a]">
+                <div className="border-t border-[#333] p-4 bg-[#0a0a1a]/80">
                     <div className="flex justify-between items-center text-xs text-gray-500 font-mono">
                         <span>FLUXSHARE_2099 // v1.0.0</span>
                         <span>SETTINGS_SYNCED</span>

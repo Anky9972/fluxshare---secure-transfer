@@ -11,6 +11,7 @@ import InteractiveBackground from './components/InteractiveBackground';
 import ToastContainer from './components/shared/ToastContainer';
 import SettingsModal from './components/SettingsModal';
 import InstallPrompt from './components/InstallPrompt';
+import AIAssistant from './components/AIAssistant';
 import { storageService } from './services/storageService';
 
 enum Tab {
@@ -40,7 +41,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#050510] text-[#e0e0ff]">
       <InteractiveBackground />
-      <Header />
+      <Header onOpenSettings={() => setIsSettingsOpen(true)} />
 
       {/* Global Components */}
       <ToastContainer />
@@ -48,14 +49,7 @@ const App: React.FC = () => {
       <InstallPrompt />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
-      {/* Settings Button (Fixed) */}
-      <button
-        onClick={() => setIsSettingsOpen(true)}
-        className="fixed top-6 right-6 z-50 bg-[#bc13fe]/20 border border-[#bc13fe] text-[#bc13fe] p-3 rounded-full hover:bg-[#bc13fe] hover:text-white transition-all shadow-lg hover:shadow-[0_0_20px_rgba(188,19,254,0.5)]"
-        title="Settings"
-      >
-        <Settings size={24} className="animate-spin-slow" />
-      </button>
+
 
       {/* Background Elements - Overlay only */}
       <div className="fixed inset-0 pointer-events-none z-0">

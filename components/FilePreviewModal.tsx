@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { X, Download, Copy, Check, FileText, Image as ImageIcon, Video, Music, Code, File } from 'lucide-react';
+import { X, Download, Copy, Check, FileText, Image as ImageIcon, Video, Music, Code, File, ExternalLink, AlertCircle } from 'lucide-react';
 
 interface FilePreviewModalProps {
     isOpen: boolean;
     onClose: () => void;
     file: File | null;
     fileUrl?: string;
+    fileSize?: number;
 }
 
-const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, file, fileUrl }) => {
+const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, file, fileUrl, fileSize }) => {
     const [copied, setCopied] = useState(false);
 
     if (!isOpen || !file) return null;
@@ -84,8 +85,41 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, fi
 
             case 'pdf':
                 return (
-                    <div className="bg-white rounded-lg overflow-hidden" style={{ height: '60vh' }}>
-                        <iframe src={previewUrl} className="w-full h-full" title={file.name} />
+                    <div className="bg-[#1a1a2e] rounded-lg overflow-hidden h-full relative group">
+                        <object
+                            data={previewUrl}
+                            type="application/pdf"
+                            className="w-full h-full min-h-[60vh] rounded bg-white"
+                        >
+                            <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-4">
+                                <FileText size={48} className="text-gray-600" />
+                                <p className="text-gray-400">Unable to display PDF inline.</p>
+                                <a
+                                    href={previewUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => {
+                                        // Force open in new window if default behavior fails
+                                        if (!window.open(previewUrl, '_blank')) {
+                                            alert('Pop-up blocked! Please allow pop-ups for this site to view the PDF.');
+                                        }
+                                    }}
+                                    className="px-4 py-2 bg-[#00f3ff] text-black font-bold rounded hover:bg-[#00c2cc] transition-colors flex items-center gap-2"
+                                >
+                                    <ExternalLink size={16} />
+                                    OPEN IN NEW TAB
+                                </a>
+                            </div>
+                        </object>
+                        {/* Convenience button to open externally */}
+                        <a
+                            href={previewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="absolute bottom-4 right-4 bg-black/80 backdrop-blur text-white px-3 py-1.5 rounded-lg text-xs border border-white/20 hover:border-[#00f3ff] hover:text-[#00f3ff] transition-all flex items-center gap-2 opacity-0 group-hover:opacity-100"
+                        >
+                            <ExternalLink size={14} /> Open externally
+                        </a>
                     </div>
                 );
 
@@ -118,8 +152,8 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, fi
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-[#050510] border border-[#00f3ff]/30 rounded-xl max-w-5xl w-full max-h-[95vh] overflow-hidden flex flex-col shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fadeIn">
+            <div className="bg-[#050510]/95 border border-[#00f3ff]/30 rounded-xl max-w-5xl w-full max-h-[95vh] overflow-hidden flex flex-col shadow-[0_0_50px_rgba(0,243,255,0.15)] backdrop-blur-xl">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-[#00f3ff]/30 bg-[#00f3ff]/5">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -127,7 +161,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, fi
                         <div className="flex-1 min-w-0">
                             <h2 className="font-display text-lg font-bold text-white truncate">{file.name}</h2>
                             <p className="text-xs text-gray-500 font-mono">
-                                {(file.size / 1024).toFixed(2)} KB • {fileType.toUpperCase()}
+                                {((fileSize ?? file.size) / 1024).toFixed(2)} KB • {fileType.toUpperCase()}
                             </p>
                         </div>
                     </div>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, Mic, MicOff, VideoOff, Phone, PhoneOff, Users, MessageSquare, Send, Search, Wifi, ShieldCheck, Activity, SwitchCamera, Smile, Play, Pause, Monitor, MonitorOff } from 'lucide-react';
+import { Video, Mic, MicOff, VideoOff, Phone, PhoneOff, Users, MessageSquare, Send, Search, Wifi, ShieldCheck, Activity, SwitchCamera, Smile, Play, Pause, Monitor, MonitorOff, Sparkles, FileText, Loader2, Copy, Check } from 'lucide-react';
 import { ChatMessage, VoiceRecording } from '../types';
 import CyberpunkEmojiPicker from './shared/EmojiPicker';
 import { audioService } from '../services/audioService';
 import { notificationService } from '../services/notificationService';
+import { geminiService } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import WhiteboardPanel from './WhiteboardPanel';
@@ -38,6 +39,10 @@ const CommunicationHub: React.FC = () => {
     const [isTyping, setIsTyping] = useState(false);
     const [peerTyping, setPeerTyping] = useState(false);
     const [remoteStrokes, setRemoteStrokes] = useState<any[]>([]);
+    const [transcribingId, setTranscribingId] = useState<string | null>(null);
+    const [isAnalyzingWhiteboard, setIsAnalyzingWhiteboard] = useState(false);
+    const [isImprovingMessage, setIsImprovingMessage] = useState(false);
+    const [idCopied, setIdCopied] = useState(false);
 
     const peerRef = useRef<any>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
@@ -485,25 +490,125 @@ const CommunicationHub: React.FC = () => {
         }
     };
 
+
+
+    const handleTranscribe = async (msgId: string, recording: VoiceRecording) => {
+        if (!recording.audioData) return;
+        setTranscribingId(msgId);
+        try {
+            const text = await geminiService.transcribeAudio(recording.audioData);
+            setChatHistory(prev => prev.map(m => m.id === msgId ? { ...m, text: `[🎤 Transcription]: ${text}` } : m));
+            notificationService.showToast({ type: 'success', message: 'Transcription complete' });
+        } catch (error) {
+            notificationService.showToast({ type: 'error', message: 'Transcription failed' });
+        } finally {
+            setTranscribingId(null);
+        }
+    };
+
+    const handleWhiteboardAnalyze = async (imageData: string) => {
+        setIsAnalyzingWhiteboard(true);
+        try {
+            const analysis = await geminiService.analyzeImage(imageData);
+
+            // Send analysis result as a chat message
+            const text = `🎨 **AI Whiteboard Analysis**\n\n**${analysis.caption}**\n\n*Keywords: ${analysis.keywords?.join(', ')}*`;
+
+            setChatHistory(prev => [...prev, {
+                id: generateUUID(),
+                sender: 'me',
+                text: text,
+                timestamp: Date.now()
+            }]);
+
+            if (connRef.current) {
+                connRef.current.send({ type: 'chat', text: text, timestamp: Date.now() });
+            }
+
+            notificationService.showToast({ type: 'success', message: 'Whiteboard analyzed!' });
+            setActiveTab('chat'); // Switch to chat to see result
+        } catch (error) {
+            notificationService.showToast({ type: 'error', message: 'Analysis failed' });
+        } finally {
+            setIsAnalyzingWhiteboard(false);
+        }
+    };
+
+    const handleImproveMessage = async () => {
+        if (!chatInput.trim()) return;
+        setIsImprovingMessage(true);
+        try {
+            const improved = await geminiService.improveMessage(chatInput, 'professional');
+            setChatInput(improved);
+            notificationService.showToast({ type: 'success', message: 'Message improved!' });
+        } catch (error) {
+            notificationService.showToast({ type: 'error', message: 'Failed to improve message' });
+        } finally {
+            setIsImprovingMessage(false);
+        }
+    };
+
     return (
         <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 min-h-[60vh] lg:h-[70vh] overflow-y-auto">
             {/* Left Panel: Controls & Logs */}
             <div className="lg:col-span-1 flex flex-col gap-4 order-1 lg:order-1">
                 {/* ID Card */}
-                <div className="bg-[#050510]/80 border border-[#00f3ff]/30 p-6 rounded-xl backdrop-blur-md relative overflow-hidden group">
+                <div className="bg-[#050510]/95 border border-[#00f3ff]/30 p-6 rounded-xl backdrop-blur-xl relative overflow-hidden group shadow-[0_0_30px_rgba(0,243,255,0.1)]">
                     <div className="absolute inset-0 bg-[#00f3ff]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <h3 className="text-[#00f3ff] font-display font-bold mb-2 flex items-center gap-2">
+                    <h3 className="text-[#00f3ff] font-display font-bold mb-2 flex items-center gap-2 relative z-10">
                         <ShieldCheck size={18} /> MY_IDENTITY
                     </h3>
-                    <div className="font-mono text-2xl text-white tracking-wider mb-2">{myId || 'INITIALIZING...'}</div>
-                    <div className="flex items-center gap-2 text-[#00f3ff]/60 text-xs">
+                    <div className="flex items-center gap-2 mb-2 relative z-10">
+                        <div className="font-mono text-2xl text-white tracking-wider">{myId || 'INITIALIZING...'}</div>
+                        {myId && (
+                            <button
+                                onClick={async () => {
+                                    if (!myId) {
+                                        notificationService.showToast({ type: 'error', message: 'No ID available yet!' });
+                                        return;
+                                    }
+                                    try {
+                                        await navigator.clipboard.writeText(myId);
+                                        setIdCopied(true);
+                                        setTimeout(() => setIdCopied(false), 2000);
+                                        audioService.playSound('success');
+                                        notificationService.showToast({ type: 'success', message: 'ID copied!' });
+                                    } catch (error) {
+                                        console.error('Copy failed:', error);
+                                        // Fallback for browsers that don't support clipboard API
+                                        const textArea = document.createElement('textarea');
+                                        textArea.value = myId;
+                                        document.body.appendChild(textArea);
+                                        textArea.select();
+                                        try {
+                                            document.execCommand('copy');
+                                            setIdCopied(true);
+                                            setTimeout(() => setIdCopied(false), 2000);
+                                            audioService.playSound('success');
+                                            notificationService.showToast({ type: 'success', message: 'ID copied!' });
+                                        } catch (fallbackError) {
+                                            notificationService.showToast({ type: 'error', message: 'Failed to copy ID' });
+                                        } finally {
+                                            document.body.removeChild(textArea);
+                                        }
+                                    }
+                                }}
+                                disabled={!myId}
+                                className="text-[#00f3ff] hover:text-white transition-colors p-2 hover:bg-[#00f3ff]/10 rounded disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                title="Copy ID"
+                            >
+                                {idCopied ? <Check size={20} /> : <Copy size={20} />}
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[#00f3ff]/60 text-xs relative z-10">
                         <Activity size={12} className="animate-pulse" />
                         <span>ENCRYPTED_UPLINK_ACTIVE</span>
                     </div>
                 </div>
 
                 {/* Connection Panel */}
-                <div className="bg-[#050510]/80 border border-[#bc13fe]/30 p-6 rounded-xl backdrop-blur-md flex-1 flex flex-col">
+                <div className="bg-[#050510]/95 border border-[#bc13fe]/30 p-6 rounded-xl backdrop-blur-xl flex-1 flex flex-col shadow-[0_0_30px_rgba(188,19,254,0.1)]">
                     <h3 className="text-[#bc13fe] font-display font-bold mb-4 flex items-center gap-2">
                         <Wifi size={18} /> ESTABLISH_LINK
                     </h3>
@@ -514,7 +619,7 @@ const CommunicationHub: React.FC = () => {
                             value={targetId}
                             onChange={(e) => setTargetId(e.target.value)}
                             placeholder="ENTER_TARGET_ID"
-                            className="flex-1 bg-black/50 border border-[#bc13fe]/30 rounded px-4 py-2 text-white font-mono placeholder-[#bc13fe]/30 focus:border-[#bc13fe] focus:outline-none transition-colors"
+                            className="flex-1 bg-black/80 border border-[#bc13fe]/30 rounded px-4 py-2 text-white font-mono placeholder-[#bc13fe]/30 focus:border-[#bc13fe] focus:outline-none transition-colors"
                         />
                         <button
                             onClick={startCall}
@@ -530,18 +635,18 @@ const CommunicationHub: React.FC = () => {
                         <div className="bg-[#00f3ff]/10 border border-[#00f3ff] p-4 rounded-lg mb-4 animate-pulse">
                             <div className="text-[#00f3ff] font-bold mb-2 text-center">INCOMING TRANSMISSION</div>
                             <div className="flex justify-center gap-4">
-                                <button onClick={answerCall} className="bg-green-500/20 text-green-400 border border-green-500 px-4 py-2 rounded hover:bg-green-500 hover:text-white transition-all">
-                                    ACCEPT
+                                <button onClick={answerCall} className="flex items-center gap-2 bg-green-500/20 text-green-400 border border-green-500 px-4 py-2 rounded hover:bg-green-500 hover:text-white transition-all">
+                                    <Phone size={16} /> ACCEPT
                                 </button>
-                                <button onClick={endCall} className="bg-red-500/20 text-red-400 border border-red-500 px-4 py-2 rounded hover:bg-red-500 hover:text-white transition-all">
-                                    DECLINE
+                                <button onClick={endCall} className="flex items-center gap-2 bg-red-500/20 text-red-400 border border-red-500 px-4 py-2 rounded hover:bg-red-500 hover:text-white transition-all">
+                                    <PhoneOff size={16} /> DECLINE
                                 </button>
                             </div>
                         </div>
                     )}
 
                     {/* Logs */}
-                    <div className="flex-1 bg-black/50 rounded-lg p-4 font-mono text-xs overflow-y-auto border border-white/10 max-h-[150px] lg:max-h-[200px]">
+                    <div className="flex-1 bg-black/80 rounded-lg p-4 font-mono text-xs overflow-y-auto border border-white/10 max-h-[150px] lg:max-h-[200px]">
                         {logs.map((log, i) => (
                             <div key={i} className="mb-1 text-gray-400 border-b border-white/5 pb-1 last:border-0">
                                 <span className="text-[#00f3ff] mr-2">➜</span>
@@ -554,7 +659,7 @@ const CommunicationHub: React.FC = () => {
 
             {/* Center Panel: Video Feeds */}
             <div className="lg:col-span-2 flex flex-col gap-4 order-2 lg:order-2">
-                <div className="min-h-[300px] lg:flex-1 bg-black rounded-xl border border-[#333] relative overflow-hidden">
+                <div className="min-h-[300px] lg:flex-1 bg-black/90 rounded-xl border border-[#333] relative overflow-hidden backdrop-blur-sm">
                     {/* Remote Video */}
                     <video
                         ref={remoteVideoRef}
@@ -575,7 +680,7 @@ const CommunicationHub: React.FC = () => {
                     )}
 
                     {/* Local Video (PIP) */}
-                    <div className="absolute bottom-4 right-4 w-32 h-24 sm:w-48 sm:h-36 bg-[#111] border border-[#00f3ff]/30 rounded-lg overflow-hidden shadow-2xl">
+                    <div className="absolute bottom-4 right-4 w-32 h-24 sm:w-48 sm:h-36 bg-[#111]/90 border border-[#00f3ff]/30 rounded-lg overflow-hidden shadow-2xl backdrop-blur-sm">
                         <video
                             ref={localVideoRef}
                             autoPlay
@@ -591,7 +696,7 @@ const CommunicationHub: React.FC = () => {
                     </div>
 
                     {/* Controls Overlay */}
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 sm:gap-4 bg-black/50 backdrop-blur-md p-2 rounded-full border border-white/10">
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 sm:gap-4 bg-black/80 backdrop-blur-xl p-2 rounded-full border border-white/10 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
                         <button onClick={toggleVideo} className={`p-2 sm:p-3 rounded-full transition-all ${isVideoEnabled ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500/20 text-red-500'}`}>
                             {isVideoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
                         </button>
@@ -617,9 +722,9 @@ const CommunicationHub: React.FC = () => {
                 </div>
 
                 {/* Chat/Whiteboard Tabbed Area */}
-                <div className="h-[180px] sm:h-[250px] bg-[#050510]/80 border border-[#333] rounded-xl flex flex-col">
+                <div className="h-[180px] sm:h-[250px] bg-[#050510]/95 border border-[#333] rounded-xl flex flex-col backdrop-blur-xl shadow-lg">
                     {/* Tab Headers */}
-                    <div className="flex border-b border-[#333] bg-[#0a0a1a]">
+                    <div className="flex border-b border-[#333] bg-[#0a0a1a]/90">
                         <button
                             onClick={() => setActiveTab('chat')}
                             className={`flex-1 px-4 py-2 text-xs font-mono transition-all ${activeTab === 'chat'
@@ -674,6 +779,16 @@ const CommunicationHub: React.FC = () => {
                                                             {Math.floor(msg.voiceRecording.duration / 60)}:{(msg.voiceRecording.duration % 60).toString().padStart(2, '0')}
                                                         </div>
                                                     </div>
+                                                    {msg.voiceRecording.audioData && (
+                                                        <button
+                                                            onClick={() => msg.voiceRecording && handleTranscribe(msg.id, msg.voiceRecording)}
+                                                            disabled={transcribingId === msg.id}
+                                                            className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-[#00f3ff] transition-colors"
+                                                            title="Transcribe Voice"
+                                                        >
+                                                            {transcribingId === msg.id ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 /* Text Message */
@@ -736,8 +851,20 @@ const CommunicationHub: React.FC = () => {
                                     onKeyDown={(e) => e.key === 'Enter' && sendChat()}
                                     placeholder={isRecordingVoice ? "RECORDING..." : "SEND_MESSAGE..."}
                                     disabled={isRecordingVoice}
-                                    className="flex-1 bg-transparent border-none focus:outline-none text-white font-mono text-sm px-2 disabled:opacity-50"
+                                    className="flex-1 bg-transparent border-none focus:outline-none text-white font-mono text-sm px-2 disabled:opacity-50 placeholder-white/30"
                                 />
+
+                                {/* AI Improve Message Button */}
+                                {chatInput.trim() && !isRecordingVoice && (
+                                    <button
+                                        onClick={handleImproveMessage}
+                                        disabled={isImprovingMessage}
+                                        className="text-[#bc13fe] hover:text-white transition-colors disabled:opacity-50"
+                                        title="Improve with AI"
+                                    >
+                                        {isImprovingMessage ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                                    </button>
+                                )}
                                 <button
                                     onClick={sendChat}
                                     disabled={isRecordingVoice}
@@ -749,7 +876,7 @@ const CommunicationHub: React.FC = () => {
                         </div>
                     ) : (
                         /* Whiteboard Tab */
-                        <div className="flex-1 p-2">
+                        <div className="flex-1 p-2 relative">
                             <WhiteboardPanel
                                 className="h-full"
                                 remoteStrokes={remoteStrokes}
@@ -771,7 +898,15 @@ const CommunicationHub: React.FC = () => {
                                         });
                                     }
                                 }}
+                                onAnalyze={handleWhiteboardAnalyze}
                             />
+                            {isAnalyzingWhiteboard && (
+                                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 pointer-events-none">
+                                    <div className="bg-[#050510] border border-[#00f3ff] px-4 py-2 rounded-lg flex items-center gap-2 text-[#00f3ff] shadow-xl animate-pulse">
+                                        <Sparkles size={16} /> Analyzing Whiteboard...
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -781,3 +916,4 @@ const CommunicationHub: React.FC = () => {
 };
 
 export default CommunicationHub;
+

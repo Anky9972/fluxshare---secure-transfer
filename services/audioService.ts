@@ -173,7 +173,7 @@ class AudioService {
     }
 
     // Play cyberpunk-themed sound effects
-    playSound(soundType: 'connect' | 'disconnect' | 'send' | 'receive' | 'error' | 'success'): void {
+    playSound(soundType: 'connect' | 'disconnect' | 'send' | 'receive' | 'error' | 'success' | 'message'): void {
         if (!this.soundEffectsEnabled) return;
 
         // Check if sound already cached
@@ -236,6 +236,11 @@ class AudioService {
                 oscillator.frequency.setValueAtTime(784, audioContext.currentTime + 0.1);
                 gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
                 gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+                break;
+            case 'message':
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
                 break;
         }
 

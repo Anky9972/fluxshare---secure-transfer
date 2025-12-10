@@ -1,7 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Server, HardDrive, Folder, FolderOpen, Download, Upload, Activity, Terminal, Copy, File as FileIcon, X, ArrowRight, Database, ChevronRight, Home, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
+import { Server, HardDrive, Folder, FolderOpen, Download, Upload, Activity, Terminal, Copy, File as FileIcon, X, ArrowRight, Database, ChevronRight, Home, AlertTriangle, RefreshCw, Loader2, Check } from 'lucide-react';
 import { RemoteEntry, SFTPPacket } from '../types';
+import { notificationService } from '../services/notificationService';
+import { audioService } from '../services/audioService';
 
 declare const Peer: any;
 const CHUNK_SIZE = 16 * 1024; // 16KB chunks
@@ -44,6 +46,7 @@ const SFTPManager: React.FC = () => {
   const [useNativeFS, setUseNativeFS] = useState(true);
   const [virtualFiles, setVirtualFiles] = useState<Map<string, File>>(new Map());
   const [virtualTree, setVirtualTree] = useState<VirtualNode>({ name: 'root', kind: 'directory', children: {} });
+  const [idCopied, setIdCopied] = useState(false);
   const fallbackInputRef = useRef<HTMLInputElement>(null);
 
   // --- REFS FOR EVENT LISTENERS (Fixes Stale Closure) ---
@@ -708,7 +711,44 @@ const SFTPManager: React.FC = () => {
             </h2>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-[#00f3ff] font-mono text-sm bg-[#00f3ff]/10 px-2 py-1 rounded border border-[#00f3ff]/30 select-all">{hostId}</span>
-              <button onClick={() => navigator.clipboard.writeText(hostId)} className="text-gray-500 hover:text-white transition-colors"><Copy size={14} /></button>
+              <button
+                onClick={async () => {
+                  if (!hostId) {
+                    notificationService.showToast({ type: 'error', message: 'No Host ID available yet!' });
+                    return;
+                  }
+                  try {
+                    await navigator.clipboard.writeText(hostId);
+                    setIdCopied(true);
+                    setTimeout(() => setIdCopied(false), 2000);
+                    audioService.playSound('success');
+                    notificationService.showToast({ type: 'success', message: 'Host ID copied!' });
+                  } catch (error) {
+                    console.error('Copy failed:', error);
+                    // Fallback for browsers that don't support clipboard API
+                    const textArea = document.createElement('textarea');
+                    textArea.value = hostId;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                      document.execCommand('copy');
+                      setIdCopied(true);
+                      setTimeout(() => setIdCopied(false), 2000);
+                      audioService.playSound('success');
+                      notificationService.showToast({ type: 'success', message: 'Host ID copied!' });
+                    } catch (fallbackError) {
+                      notificationService.showToast({ type: 'error', message: 'Failed to copy Host ID' });
+                    } finally {
+                      document.body.removeChild(textArea);
+                    }
+                  }
+                }}
+                disabled={!hostId}
+                className="text-[#00f3ff] hover:text-white transition-colors p-1.5 hover:bg-[#00f3ff]/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Copy Host ID"
+              >
+                {idCopied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
             </div>
           </div>
           <button onClick={stopServer} className="text-red-500 font-mono text-xs hover:text-red-400 flex items-center gap-1 border border-transparent hover:border-red-500/50 p-2 rounded transition-all">

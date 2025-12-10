@@ -1,17 +1,24 @@
 import React, { useState } from 'react';
-import { Shield, Menu, X, Github, Activity } from 'lucide-react';
+import { Shield, Menu, X, Github, Activity, Settings, Bot } from 'lucide-react';
 import DocsModal from './DocsModal';
 import StatusModal from './StatusModal';
+import AIAssistant from './AIAssistant';
 
-const Header: React.FC = () => {
+interface HeaderProps {
+    onOpenSettings: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onOpenSettings }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [showDocs, setShowDocs] = useState(false);
     const [showStatus, setShowStatus] = useState(false);
+    const [showAI, setShowAI] = useState(false);
 
     return (
         <>
             <DocsModal isOpen={showDocs} onClose={() => setShowDocs(false)} />
             <StatusModal isOpen={showStatus} onClose={() => setShowStatus(false)} />
+            {showAI && <AIAssistant onClose={() => setShowAI(false)} />}
             <header className="fixed top-0 left-0 w-full z-50 bg-[#050510]/80 backdrop-blur-md border-b border-[#222]">
                 <div className="max-w-[1600px] mx-auto px-4 md:px-12 h-20 flex items-center justify-between">
 
@@ -27,7 +34,7 @@ const Header: React.FC = () => {
                         </div>
 
                         {/* Text Logo */}
-                        <div className="flex flex-col">
+                        <div className="hidden md:flex flex-col">
                             <h1 className="font-display text-4xl md:text-5xl font-bold tracking-wider leading-none text-white flex items-center">
                                 <span className="glitch" data-text="FLUX">FLUX</span>
                                 <span className="glitch text-[#bc13fe]" data-text="SHARE">SHARE</span>
@@ -46,6 +53,24 @@ const Header: React.FC = () => {
 
                         <a href="#" onClick={(e) => { e.preventDefault(); setShowDocs(true); }} className="font-mono text-sm text-gray-400 hover:text-white transition-colors hover:animate-pulse">DOCS</a>
                         <a href="#" onClick={(e) => { e.preventDefault(); setShowStatus(true); }} className="font-mono text-sm text-gray-400 hover:text-white transition-colors hover:animate-pulse">STATUS</a>
+
+                        {/* AI Assistant Button (Desktop) */}
+                        <button
+                            onClick={() => setShowAI(true)}
+                            className="p-2 rounded-full border border-[#00f3ff]/30 text-[#00f3ff] hover:bg-[#00f3ff]/10 transition-colors"
+                            title="AI Assistant"
+                        >
+                            <Bot size={18} />
+                        </button>
+
+                        {/* Settings Button (Desktop) */}
+                        <button
+                            onClick={onOpenSettings}
+                            className="p-2 rounded-full border border-[#bc13fe]/30 text-[#bc13fe] hover:bg-[#bc13fe]/10 transition-colors"
+                            title="Settings"
+                        >
+                            <Settings size={18} />
+                        </button>
                     </nav>
 
                     {/* Mobile Menu Button */}
@@ -71,6 +96,24 @@ const Header: React.FC = () => {
 
                             <a href="#" onClick={(e) => { e.preventDefault(); setShowDocs(true); setIsMenuOpen(false); }} className="block px-4 py-3 font-mono text-gray-400 hover:text-white hover:bg-white/5 rounded transition-colors">DOCS</a>
                             <a href="#" onClick={(e) => { e.preventDefault(); setShowStatus(true); setIsMenuOpen(false); }} className="block px-4 py-3 font-mono text-gray-400 hover:text-white hover:bg-white/5 rounded transition-colors">STATUS</a>
+
+                            {/* AI Assistant Link (Mobile) */}
+                            <button
+                                onClick={() => { setShowAI(true); setIsMenuOpen(false); }}
+                                className="w-full text-left px-4 py-3 font-mono text-[#00f3ff] hover:bg-white/5 rounded transition-colors flex items-center gap-2"
+                            >
+                                <Bot size={16} />
+                                <span>AI ASSISTANT</span>
+                            </button>
+
+                            {/* Settings Link (Mobile) */}
+                            <button
+                                onClick={() => { onOpenSettings(); setIsMenuOpen(false); }}
+                                className="w-full text-left px-4 py-3 font-mono text-[#bc13fe] hover:bg-white/5 rounded transition-colors flex items-center gap-2"
+                            >
+                                <Settings size={16} />
+                                <span>SETTINGS</span>
+                            </button>
                         </div>
                     )
                 }

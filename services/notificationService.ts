@@ -92,8 +92,8 @@ class NotificationService {
     // Notification presets for common events
     async notifyFileReceived(fileName: string, peerId: string): Promise<void> {
         await this.showNotification({
-            title: '📥 File Received',
-            body: `${fileName} from ${peerId}`,
+            title: '📥 INCOMING_DATA // RECEIVED',
+            body: `File: ${fileName} received from [${peerId}]`,
             tag: 'file-received',
             vibrate: [200, 100, 200]
         });
@@ -101,8 +101,8 @@ class NotificationService {
 
     async notifyPeerConnected(peerId: string): Promise<void> {
         await this.showNotification({
-            title: '🔗 Peer Connected',
-            body: `${peerId} is now connected`,
+            title: '🔗 NEURAL_LINK // ACTIVE',
+            body: `Peer [${peerId}] connected to network`,
             tag: 'peer-connected',
             vibrate: [100]
         });
@@ -110,8 +110,8 @@ class NotificationService {
 
     async notifyPeerDisconnected(peerId: string): Promise<void> {
         await this.showNotification({
-            title: '🔌 Peer Disconnected',
-            body: `${peerId} has disconnected`,
+            title: '🔌 LINK_TERMINATED // OFFLINE',
+            body: `Peer [${peerId}] disconnected from network`,
             tag: 'peer-disconnected',
             vibrate: [100, 50, 100]
         });
@@ -119,10 +119,10 @@ class NotificationService {
 
     async notifyTransferComplete(fileName: string, success: boolean): Promise<void> {
         await this.showNotification({
-            title: success ? '✅ Transfer Complete' : '❌ Transfer Failed',
+            title: success ? '✅ TRANSFER_COMPLETE // SUCCESS' : '❌ TRANSMISSION_FAILED // ERROR',
             body: success
-                ? `Successfully transferred ${fileName}`
-                : `Failed to transfer ${fileName}`,
+                ? `Data packet [${fileName}] successfully integrated.`
+                : `Failed to integrate data packet [${fileName}].`,
             tag: 'transfer-complete',
             vibrate: success ? [200, 100, 200, 100, 200] : [500]
         });
@@ -130,8 +130,8 @@ class NotificationService {
 
     async notifyIncomingCall(peerId: string): Promise<void> {
         await this.showNotification({
-            title: '📞 Incoming Call',
-            body: `${peerId} is calling you`,
+            title: '📞 INCOMING_SIGNAL // CALL',
+            body: `Encrypted video feed request from [${peerId}]`,
             tag: 'incoming-call',
             requireInteraction: true,
             vibrate: [300, 100, 300, 100, 300]
@@ -140,7 +140,7 @@ class NotificationService {
 
     async notifyNewMessage(peerId: string, preview: string): Promise<void> {
         await this.showNotification({
-            title: `💬 Message from ${peerId}`,
+            title: `💬 ENCRYPTED_MESSAGE // [${peerId}]`,
             body: preview.substring(0, 50) + (preview.length > 50 ? '...' : ''),
             tag: 'new-message',
             vibrate: [100, 50, 100]

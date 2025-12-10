@@ -6,23 +6,16 @@ import { formatBytes, formatSpeed } from '../utils/fileHelpers';
 
 interface AnalyticsDashboardProps {
     className?: string;
+    metrics: {
+        currentSpeed: number;
+        peersConnected: number;
+        activeTransfers: number;
+        latency: number;
+    }
 }
 
-interface RealtimeMetrics {
-    currentSpeed: number;
-    peersConnected: number;
-    activeTransfers: number;
-    latency: number;
-}
-
-const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className = '' }) => {
+const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className = '', metrics }) => {
     const [stats, setStats] = useState(storageService.getStats());
-    const [realtimeMetrics, setRealtimeMetrics] = useState<RealtimeMetrics>({
-        currentSpeed: 0,
-        peersConnected: 0,
-        activeTransfers: 0,
-        latency: 0
-    });
 
     useEffect(() => {
         loadData();
@@ -32,26 +25,18 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className = '' 
 
     const loadData = () => {
         setStats(storageService.getStats());
-        // In a real scenario, these would come from active WebRTC connections
-        // For now, we'll simulate some metrics
-        setRealtimeMetrics({
-            currentSpeed: stats.peakSpeed * (0.5 + Math.random() * 0.5), // Simulate varying speed
-            peersConnected: 0, // Would be updated by connection manager
-            activeTransfers: 0, // Would be updated by transfer manager
-            latency: Math.floor(Math.random() * 100) + 20 // Simulated latency
-        });
     };
 
     const getSpeedTrend = () => {
         // Simple trend based on current vs average
         const avgSpeed = (stats.totalBytesSent + stats.totalBytesReceived) / stats.totalTransfers || 0;
-        return realtimeMetrics.currentSpeed > avgSpeed ? 'up' : 'down';
+        return metrics.currentSpeed > avgSpeed ? 'up' : 'down';
     };
 
     const getLatencyStatus = () => {
-        if (realtimeMetrics.latency < 50) return { color: 'text-[#00ff9d]', status: 'EXCELLENT' };
-        if (realtimeMetrics.latency < 100) return { color: 'text-[#00f3ff]', status: 'GOOD' };
-        if (realtimeMetrics.latency < 200) return { color: 'text-[#f3ff00]', status: 'FAIR' };
+        if (metrics.latency < 50) return { color: 'text-[#00ff9d]', status: 'EXCELLENT' };
+        if (metrics.latency < 100) return { color: 'text-[#00f3ff]', status: 'GOOD' };
+        if (metrics.latency < 200) return { color: 'text-[#f3ff00]', status: 'FAIR' };
         return { color: 'text-[#ff0055]', status: 'POOR' };
     };
 
@@ -85,7 +70,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className = '' 
                             )}
                         </div>
                         <div className="text-lg font-bold text-white font-mono">
-                            {formatSpeed(realtimeMetrics.currentSpeed)}
+                            {formatSpeed(metrics.currentSpeed)}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">Current Speed</div>
                     </div>
@@ -94,7 +79,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className = '' 
                     <div className="bg-[#050510] border border-[#bc13fe]/30 rounded-lg p-3">
                         <Wifi size={16} className="text-[#bc13fe] mb-2" />
                         <div className="text-lg font-bold text-white font-mono">
-                            {realtimeMetrics.peersConnected}
+                            {metrics.peersConnected}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">Peers Connected</div>
                     </div>
@@ -103,7 +88,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className = '' 
                     <div className="bg-[#050510] border border-[#00ff9d]/30 rounded-lg p-3">
                         <BarChart2 size={16} className="text-[#00ff9d] mb-2" />
                         <div className="text-lg font-bold text-white font-mono">
-                            {realtimeMetrics.activeTransfers}
+                            {metrics.activeTransfers}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">Active Transfers</div>
                     </div>
@@ -112,7 +97,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className = '' 
                     <div className="bg-[#050510] border border-[#f3ff00]/30 rounded-lg p-3">
                         <Activity size={16} className="text-[#f3ff00] mb-2" />
                         <div className={`text-lg font-bold font-mono ${latencyStatus.color}`}>
-                            {realtimeMetrics.latency}ms
+                            {metrics.latency}ms
                         </div>
                         <div className={`text-xs ${latencyStatus.color} mt-1`}>{latencyStatus.status}</div>
                     </div>
@@ -206,8 +191,8 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className = '' 
                         <div className="text-xs text-gray-500">Reliability</div>
                     </div>
                     <div className="text-center">
-                        <div className={`text-3xl mb-1 ${realtimeMetrics.latency < 100 ? 'text-[#00ff9d]' : realtimeMetrics.latency < 200 ? 'text-[#f3ff00]' : 'text-[#ff0055]'}`}>
-                            {realtimeMetrics.latency < 100 ? '⚡' : realtimeMetrics.latency < 200 ? '⏱️' : '🐌'}
+                        <div className={`text-3xl mb-1 ${metrics.latency < 100 ? 'text-[#00ff9d]' : metrics.latency < 200 ? 'text-[#f3ff00]' : 'text-[#ff0055]'}`}>
+                            {metrics.latency < 100 ? '⚡' : metrics.latency < 200 ? '⏱️' : '🐌'}
                         </div>
                         <div className="text-xs text-gray-500">Connection</div>
                     </div>

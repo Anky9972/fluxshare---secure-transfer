@@ -1,7 +1,7 @@
 // QR Code share Component - Generate and display QR codes with cyberpunk styling
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { Copy, Download, QrCode as QrIcon } from 'lucide-react';
+import { Copy, Download, QrCode as QrIcon, Check } from 'lucide-react';
 import { copyToClipboard } from '../../utils/fileHelpers';
 import { audioService } from '../../services/audioService';
 import { notificationService } from '../../services/notificationService';
@@ -22,10 +22,13 @@ const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({
     className = ''
 }) => {
     const qrRef = useRef<HTMLDivElement>(null);
+    const [copied, setCopied] = useState(false);
 
     const handleCopy = async () => {
         const success = await copyToClipboard(value);
         if (success) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
             audioService.playSound('success');
             notificationService.showToast({
                 type: 'success',
@@ -99,11 +102,10 @@ const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({
             {showActions && (
                 <div className="flex gap-2 mt-4">
                     <button
-                        onClick={handleCopy}
                         className="flex-1 bg-[#00f3ff]/20 border border-[#00f3ff] text-[#00f3ff] px-4 py-2 rounded hover:bg-[#00f3ff] hover:text-black transition-all flex items-center justify-center gap-2 text-sm font-medium"
                     >
-                        <Copy size={16} />
-                        COPY
+                        {copied ? <Check size={16} /> : <Copy size={16} />}
+                        {copied ? 'COPIED' : 'COPY'}
                     </button>
                     <button
                         onClick={handleDownload}

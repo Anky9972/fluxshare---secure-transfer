@@ -1,12 +1,13 @@
 // Interactive Whiteboard - Collaborative drawing canvas
 import React, { useRef, useState, useEffect } from 'react';
-import { Pencil, Eraser, Square, Circle, Trash2, Download, Palette, Undo, Redo, MousePointer } from 'lucide-react';
+import { Pencil, Eraser, Square, Circle, Trash2, Download, Palette, Undo, Redo, MousePointer, Sparkles } from 'lucide-react';
 
 interface WhiteboardProps {
     onStrokeDraw?: (stroke: DrawStroke) => void;
     onClear?: () => void;
-    remoteStrokes?: DrawStroke[];
+    onAnalyze?: (imageData: string) => Promise<void>;
     className?: string;
+    remoteStrokes?: DrawStroke[];
 }
 
 interface DrawStroke {
@@ -37,6 +38,7 @@ const colors = [
 const WhiteboardPanel: React.FC<WhiteboardProps> = ({
     onStrokeDraw,
     onClear,
+    onAnalyze,
     remoteStrokes = [],
     className = ''
 }) => {
@@ -80,9 +82,8 @@ const WhiteboardPanel: React.FC<WhiteboardProps> = ({
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Clear canvas
-        ctx.fillStyle = '#050510';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Clear canvas to transparent (letting container background show)
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // Draw grid
         ctx.strokeStyle = '#1a1a2e';
@@ -277,7 +278,7 @@ const WhiteboardPanel: React.FC<WhiteboardProps> = ({
     };
 
     return (
-        <div className={`bg-[#0a0a1a] rounded-xl border border-[#333] overflow-hidden ${className}`}>
+        <div className={`bg-[#050510]/95 rounded-xl border border-[#333] overflow-hidden backdrop-blur-xl shadow-[0_0_30px_rgba(0,243,255,0.05)] ${className}`}>
             {/* Toolbar */}
             <div className="bg-[#050510] border-b border-[#333] p-3 flex flex-wrap items-center gap-2">
                 {/* Drawing Tools */}
@@ -376,7 +377,7 @@ const WhiteboardPanel: React.FC<WhiteboardProps> = ({
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-1">
+                <div className="flex gap-1 border-l border-[#333] pl-3">
                     <button
                         onClick={clearCanvas}
                         className="p-2 rounded bg-[#1a1a2e] text-white hover:bg-[#ff0055] hover:text-black transition-colors"
@@ -391,6 +392,20 @@ const WhiteboardPanel: React.FC<WhiteboardProps> = ({
                     >
                         <Download size={16} />
                     </button>
+                    {onAnalyze && (
+                        <button
+                            onClick={() => {
+                                const canvas = canvasRef.current;
+                                if (canvas && onAnalyze) {
+                                    onAnalyze(canvas.toDataURL());
+                                }
+                            }}
+                            className="p-2 rounded bg-[#1a1a2e] text-[#bc13fe] hover:bg-[#bc13fe] hover:text-white transition-colors"
+                            title="Analyze with AI"
+                        >
+                            <Sparkles size={16} />
+                        </button>
+                    )}
                 </div>
             </div>
 

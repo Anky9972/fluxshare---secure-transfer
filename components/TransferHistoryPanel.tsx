@@ -27,7 +27,7 @@ const TransferHistoryPanel: React.FC<TransferHistoryPanelProps> = ({ className =
     };
 
     const handleClearHistory = () => {
-        if (confirm('⚠️ Clear all transfer history? This cannot be undone.')) {
+        if (confirm('Clear all transfer history? This cannot be undone.')) {
             storageService.clearHistory();
             loadData();
         }
@@ -98,12 +98,15 @@ const TransferHistoryPanel: React.FC<TransferHistoryPanelProps> = ({ className =
                     <button
                         key={f}
                         onClick={() => setFilter(f)}
-                        className={`flex-1 px-4 py-2 text-sm font-medium uppercase tracking-wider transition-all ${filter === f
-                                ? 'text-[#00f3ff] border-b-2 border-[#00f3ff] bg-[#00f3ff]/10'
-                                : 'text-gray-500 hover:text-white hover:bg-white/5'
+                        className={`flex-1 px-4 py-2 text-sm font-medium uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${filter === f
+                            ? 'text-[#00f3ff] border-b-2 border-[#00f3ff] bg-[#00f3ff]/10'
+                            : 'text-gray-500 hover:text-white hover:bg-white/5'
                             }`}
                     >
-                        {f === 'all' ? '📊 All' : f === 'sent' ? '📤 Sent' : '📥 Received'}
+                        {f === 'all' && <BarChart3 size={14} />}
+                        {f === 'sent' && <Upload size={14} />}
+                        {f === 'received' && <Download size={14} />}
+                        {f === 'all' ? 'All' : f === 'sent' ? 'Sent' : 'Received'}
                     </button>
                 ))}
             </div>
@@ -126,8 +129,8 @@ const TransferHistoryPanel: React.FC<TransferHistoryPanelProps> = ({ className =
                                 <div className="flex items-start gap-3">
                                     {/* Direction Icon */}
                                     <div className={`p-2 rounded-lg ${transfer.direction === 'sent'
-                                            ? 'bg-[#bc13fe]/20 text-[#bc13fe]'
-                                            : 'bg-[#00ff9d]/20 text-[#00ff9d]'
+                                        ? 'bg-[#bc13fe]/20 text-[#bc13fe]'
+                                        : 'bg-[#00ff9d]/20 text-[#00ff9d]'
                                         }`}>
                                         {transfer.direction === 'sent' ? <Upload size={16} /> : <Download size={16} />}
                                     </div>
@@ -161,8 +164,8 @@ const TransferHistoryPanel: React.FC<TransferHistoryPanelProps> = ({ className =
 
                                     {/* Status Badge */}
                                     <div className={`px-2 py-1 rounded text-xs font-mono ${transfer.success
-                                            ? 'bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/30'
-                                            : 'bg-[#ff0055]/10 text-[#ff0055] border border-[#ff0055]/30'
+                                        ? 'bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/30'
+                                        : 'bg-[#ff0055]/10 text-[#ff0055] border border-[#ff0055]/30'
                                         }`}>
                                         {transfer.success ? 'OK' : 'ERR'}
                                     </div>
