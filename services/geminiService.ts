@@ -15,7 +15,7 @@ export class GeminiService {
   private initialize() {
     // Try to get key from multiple sources
     // @ts-ignore
-    const envKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
+    const envKey = import.meta.env.VITE_GEMINI_API_KEY;
     const storedKey = localStorage.getItem(STORAGE_KEY_API_KEY);
 
     if (storedKey) {
