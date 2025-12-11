@@ -129,13 +129,13 @@ const P2PShare: React.FC = () => {
                     // @ts-ignore
                     peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
                     // @ts-ignore
-                    peerConfig.secure = import.meta.env.VITE_ENV !== 'development';
+                    peerConfig.secure = import.meta.env.VITE_PEER_SECURE === 'true';
                 } else {
-                    // Use local peer server by default
-                    peerConfig.host = 'localhost';
-                    peerConfig.port = 9000;
+                    // Use public PeerJS cloud server as default (works in production)
+                    peerConfig.host = '0.peerjs.com';
+                    peerConfig.port = 443;
                     peerConfig.path = '/';
-                    peerConfig.secure = false;
+                    peerConfig.secure = true;
                 }
 
                 const peer = new Peer(customId, peerConfig);

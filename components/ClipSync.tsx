@@ -279,7 +279,13 @@ const ClipSync: React.FC = () => {
             peerConfig.host = envHost;
             peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
             peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
-            peerConfig.secure = import.meta.env.VITE_ENV !== 'development';
+            peerConfig.secure = import.meta.env.VITE_PEER_SECURE === 'true';
+        } else {
+            // Use public PeerJS cloud server as default
+            peerConfig.host = '0.peerjs.com';
+            peerConfig.port = 443;
+            peerConfig.path = '/';
+            peerConfig.secure = true;
         }
         const peer = new Peer(id, peerConfig);
         peer.on('open', (id: string) => setPeerId(id));
@@ -303,8 +309,8 @@ const ClipSync: React.FC = () => {
                     refreshClips();
                     audioService.playSound('receive');
                     const senderName = data.username ? `${data.username}` : 'peer';
-                        notificationService.showToast({ type: 'success', message: `Received ${data.clips.length} clips from ${senderName}!` });
-                        if (data.username) setPeerUsername(data.username);
+                    notificationService.showToast({ type: 'success', message: `Received ${data.clips.length} clips from ${senderName}!` });
+                    if (data.username) setPeerUsername(data.username);
                 }
             });
             conn.on('open', () => { audioService.playSound('connect'); notificationService.showToast({ type: 'success', message: 'Connected!' }); });
@@ -346,8 +352,8 @@ const ClipSync: React.FC = () => {
                 refreshClips();
                 audioService.playSound('receive');
                 const senderName = data.username ? `${data.username}` : 'peer';
-                    notificationService.showToast({ type: 'success', message: `Received clip from ${senderName}!` });
-                    if (data.username) setPeerUsername(data.username);
+                notificationService.showToast({ type: 'success', message: `Received clip from ${senderName}!` });
+                if (data.username) setPeerUsername(data.username);
             } else if (data.type === 'clips-batch') {
                 data.clips.forEach((clipData: any) => {
                     const savedClip = clipboardService.saveClip(clipData.text, clipData.category);
@@ -356,8 +362,8 @@ const ClipSync: React.FC = () => {
                 refreshClips();
                 audioService.playSound('receive');
                 const senderName = data.username ? `${data.username}` : 'peer';
-                        notificationService.showToast({ type: 'success', message: `Received ${data.clips.length} clips from ${senderName}!` });
-                        if (data.username) setPeerUsername(data.username);
+                notificationService.showToast({ type: 'success', message: `Received ${data.clips.length} clips from ${senderName}!` });
+                if (data.username) setPeerUsername(data.username);
             }
         });
         conn.on('close', () => { setConnectionStatus('disconnected'); connRef.current = null; audioService.playSound('disconnect'); });
@@ -522,58 +528,58 @@ const ClipSync: React.FC = () => {
                         >
                             {batchCapture ? 'Stop' : 'Start'}
                         </button>
-                {/* P2P Connection Panel */}
-                <div className="flex flex-wrap items-center justify-center gap-3 p-3 bg-[#0a0a12] border border-[#00f3ff]/30 rounded-lg">
-                    <div className="flex items-center gap-2">
-                        <Wifi size={14} className="text-[#00f3ff]" />
-                        <div className="text-xs font-mono text-[#00f3ff]">MY ID: {peerId || 'INITIALIZING...'}</div>
-                        {peerId && (
-                            <button
-                                onClick={handleCopyPeerId}
-                                className="p-1 hover:bg-[#00f3ff]/10 rounded transition-colors"
-                                title="Copy Peer ID"
-                            >
-                                {idCopied ? <Check size={12} className="text-[#00ff9d]" /> : <Copy size={12} className="text-[#00f3ff]" />}
-                            </button>
-                        )}
-                    </div>
-                    <div className="flex-1 min-w-[200px]">
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={targetId}
-                                onChange={(e) => setTargetId(e.target.value)}
-                                placeholder="Peer ID to connect"
-                                className="flex-1 bg-black/50 border border-[#333] rounded px-2 py-1 text-white text-xs font-mono outline-none focus:border-[#00f3ff]"
-                                disabled={connectionStatus === 'connected'}
-                            />
-                            {connectionStatus === 'connected' ? (
+                        {/* P2P Connection Panel */}
+                        <div className="flex flex-wrap items-center justify-center gap-3 p-3 bg-[#0a0a12] border border-[#00f3ff]/30 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <Wifi size={14} className="text-[#00f3ff]" />
+                                <div className="text-xs font-mono text-[#00f3ff]">MY ID: {peerId || 'INITIALIZING...'}</div>
+                                {peerId && (
+                                    <button
+                                        onClick={handleCopyPeerId}
+                                        className="p-1 hover:bg-[#00f3ff]/10 rounded transition-colors"
+                                        title="Copy Peer ID"
+                                    >
+                                        {idCopied ? <Check size={12} className="text-[#00ff9d]" /> : <Copy size={12} className="text-[#00f3ff]" />}
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-[200px]">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={targetId}
+                                        onChange={(e) => setTargetId(e.target.value)}
+                                        placeholder="Peer ID to connect"
+                                        className="flex-1 bg-black/50 border border-[#333] rounded px-2 py-1 text-white text-xs font-mono outline-none focus:border-[#00f3ff]"
+                                        disabled={connectionStatus === 'connected'}
+                                    />
+                                    {connectionStatus === 'connected' ? (
+                                        <button
+                                            onClick={handleDisconnect}
+                                            className="bg-[#ff0055]/20 border border-[#ff0055] text-[#ff0055] px-3 py-1 rounded text-xs hover:bg-[#ff0055]/30 transition-all"
+                                        >
+                                            Disconnect
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={handleConnect}
+                                            disabled={!targetId || connectionStatus === 'connecting'}
+                                            className="bg-[#00f3ff]/20 border border-[#00f3ff] text-[#00f3ff] px-3 py-1 rounded text-xs hover:bg-[#00f3ff]/30 transition-all disabled:opacity-50"
+                                        >
+                                            {connectionStatus === 'connecting' ? 'Connecting...' : 'Connect'}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            {connectionStatus === 'connected' && (
                                 <button
-                                    onClick={handleDisconnect}
-                                    className="bg-[#ff0055]/20 border border-[#ff0055] text-[#ff0055] px-3 py-1 rounded text-xs hover:bg-[#ff0055]/30 transition-all"
+                                    onClick={handleShareAll}
+                                    className="bg-[#00ff9d]/20 border border-[#00ff9d] text-[#00ff9d] px-4 py-2 rounded text-xs hover:bg-[#00ff9d]/30 transition-all flex items-center gap-1"
                                 >
-                                    Disconnect
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={handleConnect}
-                                    disabled={!targetId || connectionStatus === 'connecting'}
-                                    className="bg-[#00f3ff]/20 border border-[#00f3ff] text-[#00f3ff] px-3 py-1 rounded text-xs hover:bg-[#00f3ff]/30 transition-all disabled:opacity-50"
-                                >
-                                    {connectionStatus === 'connecting' ? 'Connecting...' : 'Connect'}
+                                    <Send size={12} /> Share All
                                 </button>
                             )}
                         </div>
-                    </div>
-                    {connectionStatus === 'connected' && (
-                        <button
-                            onClick={handleShareAll}
-                            className="bg-[#00ff9d]/20 border border-[#00ff9d] text-[#00ff9d] px-4 py-2 rounded text-xs hover:bg-[#00ff9d]/30 transition-all flex items-center gap-1"
-                        >
-                            <Send size={12} /> Share All
-                        </button>
-                    )}
-                </div>
 
 
                     </div>
@@ -784,7 +790,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
                     📤 SENT
                 </div>
             )}
-            
+
             {/* Header */}
             <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -838,7 +844,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
                 >
                     <Trash2 size={14} />
                 </button>
-                
+
                 {connectionStatus === 'connected' && onShare && (
                     <button
                         onClick={() => onShare(clip)}

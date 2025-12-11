@@ -83,11 +83,13 @@ const CommunicationHub: React.FC = () => {
                     peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
                     // @ts-ignore
                     peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
-                }
-                // Set secure flag based on environment
-                if (import.meta.env.VITE_ENV === 'development') {
-                    peerConfig.secure = false;
+                    // @ts-ignore
+                    peerConfig.secure = import.meta.env.VITE_PEER_SECURE === 'true';
                 } else {
+                    // Use public PeerJS cloud server as default
+                    peerConfig.host = '0.peerjs.com';
+                    peerConfig.port = 443;
+                    peerConfig.path = '/';
                     peerConfig.secure = true;
                 }
 
