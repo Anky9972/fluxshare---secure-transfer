@@ -51,6 +51,8 @@ const P2PShare: React.FC = () => {
     const [aiLoading, setAiLoading] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const [idCopied, setIdCopied] = useState(false);
+    const [myUsername, setMyUsername] = useState('Anonymous');
+    const [peerUsername, setPeerUsername] = useState('Peer');
 
     // File State
     const [files, setFiles] = useState<File[]>([]); // Changed to array for multiple files
@@ -126,12 +128,14 @@ const P2PShare: React.FC = () => {
                     peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
                     // @ts-ignore
                     peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
-                }
-
-                if (import.meta.env.VITE_ENV === 'development') {
-                    peerConfig.secure = false;
+                    // @ts-ignore
+                    peerConfig.secure = import.meta.env.VITE_ENV !== 'development';
                 } else {
-                    peerConfig.secure = true;
+                    // Use local peer server by default
+                    peerConfig.host = 'localhost';
+                    peerConfig.port = 9000;
+                    peerConfig.path = '/';
+                    peerConfig.secure = false;
                 }
 
                 const peer = new Peer(customId, peerConfig);
@@ -260,12 +264,12 @@ const P2PShare: React.FC = () => {
             receivedChunksRef.current = [];
             receivedSizeRef.current = 0;
             setReceivedMeta({
-            name: data.name,
-            size: data.size,
-            mime: data.mime,
-            isEncrypted: data.isEncrypted
-        });
-        if (data.username) setPeerUsername(data.username);
+                name: data.name,
+                size: data.size,
+                mime: data.mime,
+                isEncrypted: data.isEncrypted
+            });
+            if (data.username) setPeerUsername(data.username);
             setTransferProgress(0);
             addLog(`Receiving stream: ${data.name}${data.isEncrypted ? ' (Encrypted)' : ''}`);
             addSystemMessage(`Incoming data stream: ${data.name}`);
