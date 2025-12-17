@@ -1,7 +1,8 @@
 // Voice Recorder Component - Record voice messages with waveform visualization
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Square, Play, Pause, Trash2, Send } from 'lucide-react';
-import { audioService, VoiceRecording } from '../../services/audioService';
+import { audioService } from '../../services/audioService';
+import type { VoiceRecording } from '../../types';
 
 interface VoiceRecorderProps {
     onRecordingComplete?: (recording: VoiceRecording) => void;

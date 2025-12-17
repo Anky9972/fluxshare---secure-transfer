@@ -124,7 +124,12 @@ class EncryptionService {
     decryptMessage(encryptedMessage: string, passphrase: string): string {
         try {
             const decrypted = CryptoJS.AES.decrypt(encryptedMessage, passphrase);
-            return decrypted.toString(CryptoJS.enc.Utf8);
+            const result = decrypted.toString(CryptoJS.enc.Utf8);
+            // CryptoJS returns empty string when decryption fails with wrong password
+            if (!result) {
+                throw new Error('Decryption failed - incorrect passphrase');
+            }
+            return result;
         } catch (error) {
             console.error('Message decryption failed:', error);
             throw new Error('Failed to decrypt message');

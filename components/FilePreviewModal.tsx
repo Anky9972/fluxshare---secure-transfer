@@ -84,42 +84,59 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, fi
                 );
 
             case 'pdf':
+                // Check if mobile device
+                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
                 return (
                     <div className="bg-[#1a1a2e] rounded-lg overflow-hidden h-full relative group">
-                        <object
-                            data={previewUrl}
-                            type="application/pdf"
-                            className="w-full h-full min-h-[60vh] rounded bg-white"
-                        >
-                            <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-4">
-                                <FileText size={48} className="text-gray-600" />
-                                <p className="text-gray-400">Unable to display PDF inline.</p>
-                                <a
-                                    href={previewUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => {
-                                        // Force open in new window if default behavior fails
-                                        if (!window.open(previewUrl, '_blank')) {
-                                            alert('Pop-up blocked! Please allow pop-ups for this site to view the PDF.');
-                                        }
-                                    }}
-                                    className="px-4 py-2 bg-[#00f3ff] text-black font-bold rounded hover:bg-[#00c2cc] transition-colors flex items-center gap-2"
-                                >
-                                    <ExternalLink size={16} />
-                                    OPEN IN NEW TAB
-                                </a>
+                        {!isMobile ? (
+                            // Desktop: Try native PDF rendering with iframe
+                            <iframe
+                                src={previewUrl}
+                                title={file.name}
+                                className="w-full h-full min-h-[60vh] rounded bg-white"
+                            />
+                        ) : (
+                            // Mobile: Show download/open UI
+                            <div className="flex flex-col items-center justify-center h-full min-h-[40vh] p-8 text-center space-y-6">
+                                <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center">
+                                    <FileText size={40} className="text-red-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-display font-bold text-white mb-2">{file.name}</h3>
+                                    <p className="text-gray-400 text-sm">PDF files open best in your device's native viewer</p>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <a
+                                        href={previewUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-6 py-3 bg-[#00f3ff] text-black font-bold rounded-lg hover:bg-[#00c2cc] transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <ExternalLink size={18} />
+                                        Open PDF
+                                    </a>
+                                    <button
+                                        onClick={handleDownload}
+                                        className="px-6 py-3 bg-[#333] text-white font-bold rounded-lg hover:bg-[#444] transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Download size={18} />
+                                        Download
+                                    </button>
+                                </div>
                             </div>
-                        </object>
-                        {/* Convenience button to open externally */}
-                        <a
-                            href={previewUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="absolute bottom-4 right-4 bg-black/80 backdrop-blur text-white px-3 py-1.5 rounded-lg text-xs border border-white/20 hover:border-[#00f3ff] hover:text-[#00f3ff] transition-all flex items-center gap-2 opacity-0 group-hover:opacity-100"
-                        >
-                            <ExternalLink size={14} /> Open externally
-                        </a>
+                        )}
+                        {/* Convenience button for desktop too */}
+                        {!isMobile && (
+                            <a
+                                href={previewUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="absolute bottom-4 right-4 bg-black/80 backdrop-blur text-white px-3 py-1.5 rounded-lg text-xs border border-white/20 hover:border-[#00f3ff] hover:text-[#00f3ff] transition-all flex items-center gap-2 opacity-0 group-hover:opacity-100"
+                            >
+                                <ExternalLink size={14} /> Open in new tab
+                            </a>
+                        )}
                     </div>
                 );
 
@@ -152,14 +169,14 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, fi
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fadeIn">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-md animate-fadeIn">
             <div className="bg-[#050510]/95 border border-[#00f3ff]/30 rounded-xl max-w-5xl w-full max-h-[95vh] overflow-hidden flex flex-col shadow-[0_0_50px_rgba(0,243,255,0.15)] backdrop-blur-xl">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-[#00f3ff]/30 bg-[#00f3ff]/5">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                         {getIcon()}
                         <div className="flex-1 min-w-0">
-                            <h2 className="font-display text-lg font-bold text-white truncate">{file.name}</h2>
+                            <h2 className="font-display text-base sm:text-lg font-bold text-white truncate">{file.name}</h2>
                             <p className="text-xs text-gray-500 font-mono">
                                 {((fileSize ?? file.size) / 1024).toFixed(2)} KB • {fileType.toUpperCase()}
                             </p>
@@ -183,7 +200,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, fi
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-3 sm:p-6">
                     {renderPreview()}
                 </div>
             </div>

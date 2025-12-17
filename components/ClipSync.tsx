@@ -585,11 +585,11 @@ const ClipSync: React.FC = () => {
                     </div>
 
                     {/* Manual Buttons */}
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-3">
                         <button
                             onClick={handleCaptureClipboard}
                             disabled={autoCapture || batchCapture}
-                            className={`flex-1 px-4 py-3 rounded-lg font-display text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${autoCapture || batchCapture
+                            className={`w-full sm:flex-1 sm:w-auto px-4 py-3 rounded-lg font-display text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${autoCapture || batchCapture
                                 ? 'bg-[#222] border border-[#333] text-gray-600 cursor-not-allowed'
                                 : 'bg-[#f3ff00]/20 border border-[#f3ff00] text-[#f3ff00] hover:bg-[#f3ff00] hover:text-black'
                                 }`}
@@ -749,7 +749,7 @@ interface ClipCardProps {
     onDelete: (id: string) => void;
     onToggleExpand: (id: string | null) => void;
     formatTimestamp: (timestamp: number) => string;
-    getCategoryIcon: (category: string) => JSX.Element;
+    getCategoryIcon: (category: string) => React.ReactNode;
     truncateText: (text: string, maxLength?: number) => string;
     // P2P Props
     connectionStatus: 'disconnected' | 'connecting' | 'connected';
