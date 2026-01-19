@@ -113,7 +113,7 @@ const SFTPManager: React.FC = () => {
       }
     };
 
-    // Add optional self-hosted config
+    // Add peer server config from env or use public PeerJS cloud
     // @ts-ignore
     const envHost = import.meta.env.VITE_PEER_HOST;
     if (envHost && envHost.trim() !== '') {
@@ -123,11 +123,13 @@ const SFTPManager: React.FC = () => {
       peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
       // @ts-ignore
       peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
-    }
-    // Set secure flag based on environment (development => ws, production => wss)
-    if (import.meta.env.VITE_ENV === 'development') {
-      peerConfig.secure = false;
+      // @ts-ignore
+      peerConfig.secure = import.meta.env.VITE_PEER_SECURE === 'true';
     } else {
+      // Use public PeerJS cloud server as default
+      peerConfig.host = '0.peerjs.com';
+      peerConfig.port = 443;
+      peerConfig.path = '/';
       peerConfig.secure = true;
     }
 
@@ -486,7 +488,7 @@ const SFTPManager: React.FC = () => {
       }
     };
 
-    // Add optional self-hosted config
+    // Add peer server config from env or use public PeerJS cloud
     // @ts-ignore
     const envHost = import.meta.env.VITE_PEER_HOST;
     if (envHost && envHost.trim() !== '') {
@@ -498,6 +500,12 @@ const SFTPManager: React.FC = () => {
       peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
       // @ts-ignore
       peerConfig.secure = import.meta.env.VITE_PEER_SECURE === 'true';
+    } else {
+      // Use public PeerJS cloud server as default
+      peerConfig.host = '0.peerjs.com';
+      peerConfig.port = 443;
+      peerConfig.path = '/';
+      peerConfig.secure = true;
     }
 
     const peer = new Peer(undefined, peerConfig);

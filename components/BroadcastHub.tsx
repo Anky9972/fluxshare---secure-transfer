@@ -78,26 +78,35 @@ const BroadcastHub: React.FC = () => {
                 console.error("Failed to parse settings", e);
             }
         } else {
-            // Fallback to env vars
+            // Fallback to env vars (use same as other components)
             // @ts-ignore
-            const envHost = import.meta.env.VITE_BROADCAST_PEER_HOST;
+            const envHost = import.meta.env.VITE_PEER_HOST;
             // @ts-ignore
-            const envPort = import.meta.env.VITE_BROADCAST_PEER_PORT;
+            const envPort = import.meta.env.VITE_PEER_PORT;
             // @ts-ignore
-            const envPath = import.meta.env.VITE_BROADCAST_PEER_PATH;
+            const envPath = import.meta.env.VITE_PEER_PATH;
+            // @ts-ignore
+            const envSecure = import.meta.env.VITE_PEER_SECURE;
 
-            // @ts-ignore
-            const isProd = import.meta.env.VITE_ENV === 'production';
-
-            if (envHost) {
+            if (envHost && envHost.trim() !== '') {
                 const envSettings = {
                     host: envHost,
-                    port: Number(envPort) || 9000,
+                    port: Number(envPort) || 443,
                     path: envPath || '/',
-                    secure: isProd || envHost !== 'localhost'
+                    secure: envSecure === 'true'
                 };
                 setSettings(envSettings);
                 setTempSettings(envSettings);
+            } else {
+                // Default to public PeerJS cloud
+                const defaultSettings = {
+                    host: '0.peerjs.com',
+                    port: 443,
+                    path: '/',
+                    secure: true
+                };
+                setSettings(defaultSettings);
+                setTempSettings(defaultSettings);
             }
         }
     }, []);
