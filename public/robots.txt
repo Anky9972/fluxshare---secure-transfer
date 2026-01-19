@@ -1,3 +1,30 @@
+# FluxShare - Free File Sharing & Clipboard Sync
+# https://fluxshare.netlify.app
+
 User-agent: *
 Allow: /
+
+# Sitemap location
 Sitemap: https://fluxshare.netlify.app/sitemap.xml
+
+# Crawl delay (be nice to the server)
+Crawl-delay: 1
+
+# Allow all major search engines
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /

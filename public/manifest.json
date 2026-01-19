@@ -1,7 +1,7 @@
 {
-    "name": "FluxShare - Secure P2P Transfer",
+    "name": "FluxShare - Free File Sharing & Clipboard Sync",
     "short_name": "FluxShare",
-    "description": "Secure peer-to-peer file transfer and collaboration platform with video calls, screen sharing, and interactive whiteboard",
+    "description": "Send large files free with no size limit. P2P file transfer, clipboard sync across devices, video calls & screen sharing. No login required. AirDrop alternative for all devices.",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#050510",
@@ -24,7 +24,8 @@
     "categories": [
         "productivity",
         "utilities",
-        "business"
+        "business",
+        "social"
     ],
     "screenshots": [
         {
