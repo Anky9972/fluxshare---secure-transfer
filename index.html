@@ -40,7 +40,7 @@
   <meta property="og:title" content="FluxShare - Secure P2P File Transfer & Collaboration" />
   <meta property="og:description"
     content="Fast, secure, and private peer-to-peer file sharing with integrated encrypted video calling and screen sharing. No size limits, direct transfer." />
-  <meta property="og:image" content="https://fluxshare.netlify.app/icon-512.png" />
+  <meta property="og:image" content="https://fluxshare.netlify.app/thumbnail.png" />
   <meta property="og:site_name" content="FluxShare" />
 
   <!-- Twitter -->
@@ -49,7 +49,7 @@
   <meta name="twitter:title" content="FluxShare - Secure P2P File Transfer & Collaboration" />
   <meta name="twitter:description"
     content="Fast, secure, and private peer-to-peer file sharing with integrated encrypted video calling and screen sharing. No size limits, direct transfer." />
-  <meta name="twitter:image" content="https://fluxshare.netlify.app/icon-512.png" />
+  <meta name="twitter:image" content="https://fluxshare.netlify.app/thumbnail.png" />
 
   <!-- Structured Data (JSON-LD) -->
   <script type="application/ld+json">
@@ -66,7 +66,7 @@
       },
       "description": "Secure peer-to-peer file transfer and collaboration platform with real-time video calls and screen sharing features.",
       "featureList": "Peer-to-Peer Transfer, SFTP Client, Encrypted Video Calls, Screen Sharing, Interactive Whiteboard",
-      "screenshot": "https://fluxshare.netlify.app/screenshot-wide.png",
+      "screenshot": "https://fluxshare.netlify.app/thumbnail.png",
       "author": {
         "@type": "Organization",
         "name": "FluxShare Team"
@@ -75,11 +75,25 @@
   </script>
 
   <title>FluxShare - Secure P2P Transfer</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  
+  <!-- Preconnect to external domains for faster loading -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="preconnect" href="https://0.peerjs.com" crossorigin>
+  
+  
+  <!-- Load PeerJS asynchronously - critical for P2P but can defer -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
+  
+  <!-- Fonts with display=swap for non-blocking -->
   <link
     href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@400;500;700;900&display=swap"
-    rel="stylesheet">
+    rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+  </noscript>
+  
   <style>
     :root {
       /* NEW PALETTE: Cyan & Purple */
@@ -557,7 +571,28 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <!-- Instant loading skeleton - shows immediately while JS loads -->
+    <div id="app-loader" style="min-height: 100vh; background: #050510; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Orbitron', 'Rajdhani', sans-serif;">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 24px;">
+        <!-- Logo placeholder -->
+        <div style="width: 80px; height: 80px; border: 2px solid #00f3ff; border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 30px rgba(0, 243, 255, 0.3);">
+          <div style="width: 40px; height: 40px; border: 2px solid #bc13fe; border-radius: 4px; animation: pulse 1.5s ease-in-out infinite;"></div>
+        </div>
+        <!-- Loading text -->
+        <div style="color: #00f3ff; font-size: 24px; font-weight: 600; letter-spacing: 4px; text-transform: uppercase;">FluxShare</div>
+        <!-- Loading bar -->
+        <div style="width: 200px; height: 3px; background: rgba(0, 243, 255, 0.2); overflow: hidden; border-radius: 2px;">
+          <div style="width: 40%; height: 100%; background: linear-gradient(90deg, #00f3ff, #bc13fe); animation: loading 1s ease-in-out infinite;"></div>
+        </div>
+        <div style="color: #666; font-size: 12px; letter-spacing: 2px; text-transform: uppercase;">Initializing Secure Connection...</div>
+      </div>
+      <style>
+        @keyframes pulse { 0%, 100% { opacity: 0.5; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1); } }
+        @keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+      </style>
+    </div>
+  </div>
   <script type="module" src="/index.tsx"></script>
 </body>
 

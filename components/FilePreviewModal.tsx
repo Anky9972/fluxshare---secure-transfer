@@ -86,16 +86,57 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, fi
             case 'pdf':
                 // Check if mobile device
                 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                
+                // Create a proper PDF blob URL with correct MIME type
+                // This ensures the browser recognizes it as a PDF
+                const pdfUrl = file.type === 'application/pdf' 
+                    ? previewUrl 
+                    : URL.createObjectURL(new Blob([file], { type: 'application/pdf' }));
 
                 return (
                     <div className="bg-[#1a1a2e] rounded-lg overflow-hidden h-full relative group">
                         {!isMobile ? (
-                            // Desktop: Try native PDF rendering with iframe
-                            <iframe
-                                src={previewUrl}
-                                title={file.name}
+                            // Desktop: Use object tag for better PDF rendering than iframe
+                            <object
+                                data={pdfUrl + '#toolbar=1&navpanes=1&scrollbar=1'}
+                                type="application/pdf"
                                 className="w-full h-full min-h-[60vh] rounded bg-white"
-                            />
+                            >
+                                {/* Fallback if object fails */}
+                                <embed
+                                    src={pdfUrl + '#toolbar=1&navpanes=1&scrollbar=1'}
+                                    type="application/pdf"
+                                    className="w-full h-full min-h-[60vh] rounded bg-white"
+                                />
+                                {/* Ultimate fallback - download link */}
+                                <div className="flex flex-col items-center justify-center h-full min-h-[40vh] p-8 text-center space-y-6">
+                                    <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center">
+                                        <AlertCircle size={40} className="text-yellow-400" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-display font-bold text-white mb-2">PDF Preview Unavailable</h3>
+                                        <p className="text-gray-400 text-sm">Your browser cannot display PDFs inline.</p>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row gap-3">
+                                        <a
+                                            href={pdfUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-6 py-3 bg-[#00f3ff] text-black font-bold rounded-lg hover:bg-[#00c2cc] transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <ExternalLink size={18} />
+                                            Open PDF
+                                        </a>
+                                        <button
+                                            onClick={handleDownload}
+                                            className="px-6 py-3 bg-[#333] text-white font-bold rounded-lg hover:bg-[#444] transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <Download size={18} />
+                                            Download
+                                        </button>
+                                    </div>
+                                </div>
+                            </object>
                         ) : (
                             // Mobile: Show download/open UI
                             <div className="flex flex-col items-center justify-center h-full min-h-[40vh] p-8 text-center space-y-6">
@@ -108,7 +149,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, fi
                                 </div>
                                 <div className="flex flex-col sm:flex-row gap-3">
                                     <a
-                                        href={previewUrl}
+                                        href={pdfUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="px-6 py-3 bg-[#00f3ff] text-black font-bold rounded-lg hover:bg-[#00c2cc] transition-colors flex items-center justify-center gap-2"
@@ -129,7 +170,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ isOpen, onClose, fi
                         {/* Convenience button for desktop too */}
                         {!isMobile && (
                             <a
-                                href={previewUrl}
+                                href={pdfUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="absolute bottom-4 right-4 bg-black/80 backdrop-blur text-white px-3 py-1.5 rounded-lg text-xs border border-white/20 hover:border-[#00f3ff] hover:text-[#00f3ff] transition-all flex items-center gap-2 opacity-0 group-hover:opacity-100"

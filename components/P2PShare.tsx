@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Download, Monitor, Video, Copy, QrCode, X, FileText, Image as ImageIcon, Music, Film, Archive, RefreshCw, Smartphone, Shield, AlertTriangle, Check, Clock, Globe, Zap, Search, Sun, Moon, Link, Eye, Share2, BarChart2, ArrowRight, Bot, Sparkles, Terminal, MessageSquare, ShieldCheck, UploadCloud, Lock, Unlock, Loader2, CheckCircle2, Wifi, Pause, Play, XCircle } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
+import { peerService } from '../services/peerService';
 import { FileTransfer, ChatMessage } from '../types';
 import FilePreviewModal from './FilePreviewModal';
 import QRCodeGenerator from './shared/QRCodeGenerator';
@@ -15,7 +16,8 @@ import { transferQueueService, QueuedFile } from '../services/transferQueueServi
 import { resumableTransferService } from '../services/resumableTransferService';
 
 declare const Peer: any;
-const CHUNK_SIZE = 16 * 1024;
+const CHUNK_SIZE = 64 * 1024; // Increased to 64KB
+const MAX_BUFFERED_AMOUNT = 16 * 1024 * 1024; // 16MB Backpressure limit
 
 // Helper for UUID generation
 const generateUUID = () => {
@@ -26,6 +28,44 @@ const generateUUID = () => {
         var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
+};
+
+// Helper to get correct MIME type (file.type can be empty sometimes)
+const getMimeType = (file: File): string => {
+    if (file.type) return file.type;
+    
+    // Fallback: detect from extension
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const mimeMap: Record<string, string> = {
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+        'svg': 'image/svg+xml',
+        'mp4': 'video/mp4',
+        'webm': 'video/webm',
+        'mov': 'video/quicktime',
+        'mp3': 'audio/mpeg',
+        'wav': 'audio/wav',
+        'ogg': 'audio/ogg',
+        'txt': 'text/plain',
+        'html': 'text/html',
+        'css': 'text/css',
+        'js': 'application/javascript',
+        'json': 'application/json',
+        'xml': 'application/xml',
+        'zip': 'application/zip',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls': 'application/vnd.ms-excel',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'ppt': 'application/vnd.ms-powerpoint',
+        'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    };
+    
+    return mimeMap[ext] || 'application/octet-stream';
 };
 
 const formatBytes = (bytes: number) => {
@@ -51,8 +91,8 @@ const P2PShare: React.FC = () => {
     const [aiLoading, setAiLoading] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const [idCopied, setIdCopied] = useState(false);
-    const [myUsername, setMyUsername] = useState('Anonymous');
-    const [peerUsername, setPeerUsername] = useState('Peer');
+    const [myUsername, setMyUsername] = useState(() => storageService.getSettings().username || 'Anonymous');
+    const [peerUsername, setPeerUsername] = useState('');
 
     // File State
     const [files, setFiles] = useState<File[]>([]); // Changed to array for multiple files
@@ -84,6 +124,13 @@ const P2PShare: React.FC = () => {
     const receivedSizeRef = useRef(0);
     const transferStartTimeRef = useRef<number>(0);
     const chatEndRef = useRef<HTMLDivElement>(null);
+    const isPausedRef = useRef(false);
+    const receivedMetaRef = useRef<{ name: string, size: number, mime: string, isEncrypted?: boolean } | null>(null);
+
+    // Sync isPaused ref
+    useEffect(() => {
+        isPausedRef.current = isPaused;
+    }, [isPaused]);
 
     // Sync queue state
     useEffect(() => {
@@ -96,87 +143,57 @@ const P2PShare: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const initPeer = () => {
-            if (typeof Peer === 'undefined') {
-                console.error('PeerJS not loaded');
-                setConnectionStatus('error');
-                addLog('CRITICAL ERROR: PeerJS library not loaded. Check internet connection or ad blockers.');
-                addSystemMessage('System failure: PeerJS missing.');
-                return;
-            }
-
+        const initPeer = async () => {
             try {
-                const customId = `NODE-${Math.floor(Math.random() * 9000) + 1000}`;
-                console.log("Initializing Peer with ID:", customId);
-
-                // @ts-ignore
-                const iceServers = (import.meta.env.VITE_ICE_SERVERS || 'stun:stun.l.google.com:19302')
-                    .split(',')
-                    .map((url: string) => ({ urls: url.trim() }));
-
-                const peerConfig: any = {
-                    debug: 2,
-                    config: { iceServers }
-                };
-
-                // @ts-ignore
-                const envHost = import.meta.env.VITE_PEER_HOST;
-                if (envHost && envHost.trim() !== '') {
-                    // @ts-ignore
-                    peerConfig.host = envHost;
-                    // @ts-ignore
-                    peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
-                    // @ts-ignore
-                    peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
-                    // @ts-ignore
-                    peerConfig.secure = import.meta.env.VITE_PEER_SECURE === 'true';
-                } else {
-                    // Use public PeerJS cloud server as default (works in production)
-                    peerConfig.host = '0.peerjs.com';
-                    peerConfig.port = 443;
-                    peerConfig.path = '/';
-                    peerConfig.secure = true;
-                }
-
-                const peer = new Peer(customId, peerConfig);
-
-                peer.on('open', (id: string) => {
-                    setPeerId(id);
-                    addLog(`System initialized. ID: ${id}`);
-                    addSystemMessage("Secure terminal ready.");
-                    setConnectionStatus('disconnected');
-                });
-
-                peer.on('connection', (conn: any) => {
-                    handleConnection(conn);
-                });
-
-                peer.on('error', (err: any) => {
-                    console.error("Peer error:", err);
-                    setConnectionStatus('error');
-                    addLog(`CRITICAL ERROR: ${err.type} - ${err.message || ''}`);
-                    addSystemMessage(`Error: ${err.type}`);
-                });
-
-                peer.on('disconnected', () => {
-                    addLog('Peer disconnected from server. Reconnecting...');
-                    peer.reconnect();
-                });
-
-                peerRef.current = peer;
+                // Use shared peer service instead of creating a new peer
+                const id = await peerService.initialize(`NODE-${Math.floor(Math.random() * 9000) + 1000}`);
+                setPeerId(id);
+                addLog(`System initialized. ID: ${id}`);
+                addSystemMessage("Secure terminal ready.");
+                setConnectionStatus('disconnected');
+                
+                // Store peer reference for compatibility
+                peerRef.current = peerService.getPeer();
+                
             } catch (err: any) {
-                console.error("Peer initialization exception:", err);
+                console.error("Peer initialization error:", err);
                 setConnectionStatus('error');
-                addLog(`INIT EXCEPTION: ${err.message || err}`);
+                addLog(`CRITICAL ERROR: ${err.message || 'PeerJS initialization failed'}`);
+                addSystemMessage('System failure: Connection error.');
             }
         };
 
+        // Set up connection listener
+        const handleIncomingConnection = (conn: any) => {
+            handleConnection(conn);
+        };
+        
+        peerService.onConnection(handleIncomingConnection);
+        
+        // Set up error listener
+        const handleError = (err: any) => {
+            console.error("Peer error:", err);
+            setConnectionStatus('error');
+            addLog(`CRITICAL ERROR: ${err.type} - ${err.message || ''}`);
+            addSystemMessage(`Error: ${err.type}`);
+        };
+        
+        peerService.on('error', handleError);
+        
+        // Set up disconnected listener
+        const handleDisconnect = () => {
+            addLog('Peer disconnected from server. Reconnecting...');
+        };
+        
+        peerService.on('disconnected', handleDisconnect);
+
         initPeer();
+        
         return () => {
-            if (peerRef.current) {
-                peerRef.current.destroy();
-                peerRef.current = null;
-            }
+            peerService.offConnection(handleIncomingConnection);
+            peerService.off('error', handleError);
+            peerService.off('disconnected', handleDisconnect);
+            // Don't destroy peer - it's shared
         };
     }, []);
 
@@ -203,10 +220,16 @@ const P2PShare: React.FC = () => {
         conn.on('open', () => {
             setConnectionStatus('connected');
             addLog('Secure tunnel established.');
-            addSystemMessage(`Uplink established with ${conn.peer}`);
             setActiveTab('chat');
             audioService.playSound('connect');
             notificationService.notifyPeerConnected(conn.peer);
+            
+            // Send our username to the peer
+            const settings = storageService.getSettings();
+            const myName = settings.username || 'Anonymous';
+            setMyUsername(myName);
+            conn.send({ type: 'identity', username: myName });
+            addSystemMessage(`Uplink established with ${conn.peer}`);
 
             const history = storageService.getHistory();
             if (!history.find(h => h.peerId === conn.peer)) {
@@ -260,16 +283,26 @@ const P2PShare: React.FC = () => {
                 originalName: data.originalName
             };
             addLog('Encrypted file incoming - password will be required');
+        } else if (data.type === 'identity') {
+            // Peer is sharing their display name
+            if (data.username) {
+                setPeerUsername(data.username);
+                addSystemMessage(`Connected with ${data.username}`);
+            }
         } else if (data.type === 'meta') {
             receivedChunksRef.current = [];
             receivedSizeRef.current = 0;
-            setReceivedMeta({
+            const newMeta = {
                 name: data.name,
                 size: data.size,
                 mime: data.mime,
                 isEncrypted: data.isEncrypted
-            });
-            if (data.username) setPeerUsername(data.username);
+            };
+            setReceivedMeta(newMeta);
+            receivedMetaRef.current = newMeta;
+            console.log("RX: Meta received", newMeta); // DEBUG LOG
+            // Also update username from file transfer metadata
+            if (data.username && !peerUsername) setPeerUsername(data.username);
             setTransferProgress(0);
             addLog(`Receiving stream: ${data.name}${data.isEncrypted ? ' (Encrypted)' : ''}`);
             addSystemMessage(`Incoming data stream: ${data.name}`);
@@ -282,21 +315,35 @@ const P2PShare: React.FC = () => {
         } else if (data.type === 'chunk') {
             receivedChunksRef.current.push(data.data);
             receivedSizeRef.current += data.data.byteLength;
-            if (receivedMeta) {
-                setTransferProgress(Math.round((receivedSizeRef.current / receivedMeta.size) * 100));
-                // Calculate Speed
-                const elapsed = (Date.now() - transferStartTimeRef.current) / 1000;
-                if (elapsed > 0) {
-                    setCurrentSpeed(receivedSizeRef.current / elapsed);
+
+            const meta = receivedMetaRef.current;
+            if (meta) {
+                // Optimization: Only update state every 5 chunks or if complete
+                const currentChunks = receivedChunksRef.current.length;
+                if (currentChunks % 5 === 0 || receivedSizeRef.current >= meta.size) {
+                    const progress = Math.min(100, Math.round((receivedSizeRef.current / meta.size) * 100));
+                    setTransferProgress(progress);
+
+                    // Calculate Speed
+                    const elapsed = (Date.now() - transferStartTimeRef.current) / 1000;
+                    if (elapsed > 0) {
+                        setCurrentSpeed(receivedSizeRef.current / elapsed);
+                    }
                 }
+            } else {
+                console.warn("RX: Chunk received but no meta ref!");
             }
         } else if (data.type === 'end') {
             addLog('Transfer complete. Reassembling...');
             addSystemMessage('Data stream verified. Transfer complete.');
-            const blob = new Blob(receivedChunksRef.current, { type: receivedMeta?.mime || 'application/octet-stream' });
+            
+            // Use ref for consistent metadata access (state might be stale in callback)
+            const meta = receivedMetaRef.current;
+            const mimeType = meta?.mime || 'application/octet-stream';
+            const blob = new Blob(receivedChunksRef.current, { type: mimeType });
 
             // If encrypted, we'll decrypt when user provides password
-            if (receivedMeta?.isEncrypted) {
+            if (meta?.isEncrypted) {
                 // Store encrypted blob temporarily
                 const url = URL.createObjectURL(blob);
                 setReceivedFileUrl(url);
@@ -307,9 +354,9 @@ const P2PShare: React.FC = () => {
                 setReceivedFileUrl(url);
 
                 // Create a file object with correct metadata for preview
-                if (receivedMeta) {
-                    const receivedFile = new File([blob], receivedMeta.name, {
-                        type: receivedMeta.mime,
+                if (meta) {
+                    const receivedFile = new File([blob], meta.name, {
+                        type: mimeType,
                         lastModified: Date.now()
                     });
                     setPreviewFile(receivedFile);
@@ -412,6 +459,7 @@ const P2PShare: React.FC = () => {
         setFiles([]);
         setReceivedFileUrl(null);
         setReceivedMeta(null);
+        receivedMetaRef.current = null;
         receivedChunksRef.current = [];
         receivedSizeRef.current = 0;
     };
@@ -445,7 +493,7 @@ const P2PShare: React.FC = () => {
 
         try {
             let fileToSend = file;
-            let finalMime = file.type;
+            let finalMime = getMimeType(file); // Use helper for robust MIME detection
             let finalSize = file.size;
             let isEncrypted = false;
 
@@ -530,21 +578,39 @@ const P2PShare: React.FC = () => {
                 return;
             }
 
-            const reader = new FileReader();
-            let chunkIndex = Math.floor(offset / CHUNK_SIZE);
-
-            reader.onerror = (err) => {
-                console.error("FileReader error:", err);
-                addLog(`Error reading file: ${reader.error?.message}`);
-                addSystemMessage('Upload failed: Read error.');
-                transferQueueService.failFile(id, reader.error?.message || 'Read error');
-                resumableTransferService.removeTransferState(transferState.transferId);
+            // HIGH SPEED TRANSFER LOOP
+            // We use a while loop with backpressure control instead of requestAnimationFrame
+            const readChunk = async (start: number, end: number): Promise<ArrayBuffer> => {
+                return new Promise((resolve, reject) => {
+                    const slice = fileToSend.slice(start, end);
+                    const r = new FileReader();
+                    r.onload = (e) => resolve(e.target?.result as ArrayBuffer);
+                    r.onerror = (e) => reject(e.target?.error);
+                    r.readAsArrayBuffer(slice);
+                });
             };
 
-            reader.onload = (e) => {
-                if (e.target?.result && !isPaused) {
-                    const chunk = e.target.result as ArrayBuffer;
+            let chunkIndex = Math.floor(offset / CHUNK_SIZE);
 
+            // Main transfer loop
+            while (offset < finalSize) {
+                // Check currently paused state via Service or Local Ref if needed.
+                // Since this function is async, we can check the ref we set up in the component.
+                if (isPausedRef.current) {
+                    await new Promise(r => setTimeout(r, 500)); // Polling pause
+                    continue;
+                }
+
+                // Check backpressure
+                if (connRef.current.dataChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+                    // Wait for buffer to clear slightly
+                    await new Promise(r => setTimeout(r, 10));
+                    continue;
+                }
+
+                // Read and Send
+                try {
+                    const chunk = await readChunk(offset, offset + CHUNK_SIZE);
                     if (chunk.byteLength > 0) {
                         connRef.current.send({
                             type: 'chunk',
@@ -556,62 +622,50 @@ const P2PShare: React.FC = () => {
                     offset += chunk.byteLength;
                     chunkIndex++;
 
-                    const progress = Math.min(100, Math.round((offset / finalSize) * 100));
-                    setTransferProgress(progress);
+                    // Update UI/State occasionally (every 5 chunks or so to save CPU)
+                    if (chunkIndex % 5 === 0 || offset >= finalSize) {
+                        const progress = Math.min(100, Math.round((offset / finalSize) * 100));
+                        setTransferProgress(progress);
 
-                    // Calculate Speed
-                    const elapsed = (Date.now() - transferStartTimeRef.current) / 1000;
-                    const speed = elapsed > 0 ? offset / elapsed : 0;
-                    setCurrentSpeed(speed);
+                        // Calculate Speed
+                        const elapsed = (Date.now() - transferStartTimeRef.current) / 1000;
+                        const speed = elapsed > 0 ? offset / elapsed : 0;
+                        setCurrentSpeed(speed);
 
-                    // Update queue and resumable state
-                    transferQueueService.updateProgress(id, offset, finalSize, speed);
-                    resumableTransferService.updateProgress(transferState.transferId, offset, chunkIndex);
-
-                    if (offset < finalSize) {
-                        readNextChunk();
-                    } else {
-                        connRef.current.send({ type: 'end' });
-                        transferQueueService.completeFile(id);
-                        addLog('Upload successfully completed.');
-                        addSystemMessage('Upload complete.');
-                        setCurrentSpeed(0);
-                        audioService.playSound('success');
-
-                        // Save to history
-                        storageService.saveTransfer({
-                            id: generateUUID(),
-                            peerId: connRef.current.peer,
-                            fileName: file.name,
-                            fileSize: file.size,
-                            timestamp: Date.now(),
-                            direction: 'sent',
-                            speed: finalSize / Math.max(0.001, (Date.now() - transferStartTimeRef.current) / 1000),
-                            success: true
-                        });
-
-                        resumableTransferService.removeTransferState(transferState.transferId);
-                        setCurrentTransferId(null);
-
-                        // Process next file in queue
-                        setTimeout(() => processQueue(), 100);
+                        transferQueueService.updateProgress(id, offset, finalSize, speed);
+                        resumableTransferService.updateProgress(transferState.transferId, offset, chunkIndex);
                     }
+                } catch (err) {
+                    console.error("Read/Send error:", err);
+                    throw err; // Break loop and handle error
                 }
-            };
+            }
 
-            const readNextChunk = () => {
-                if (isPaused) return;
+            // Transfer Complete
+            connRef.current.send({ type: 'end' });
+            transferQueueService.completeFile(id);
+            addLog('Upload successfully completed.');
+            addSystemMessage('Upload complete.');
+            setCurrentSpeed(0);
+            audioService.playSound('success');
 
-                requestAnimationFrame(() => {
-                    if (offset < finalSize) {
-                        const slice = fileToSend.slice(offset, offset + CHUNK_SIZE);
-                        reader.readAsArrayBuffer(slice);
-                    }
-                });
-            };
+            // Save to history
+            storageService.saveTransfer({
+                id: generateUUID(),
+                peerId: connRef.current.peer,
+                fileName: file.name,
+                fileSize: file.size,
+                timestamp: Date.now(),
+                direction: 'sent',
+                speed: finalSize / Math.max(0.001, (Date.now() - transferStartTimeRef.current) / 1000),
+                success: true
+            });
 
-            // Start reading
-            readNextChunk();
+            resumableTransferService.removeTransferState(transferState.transferId);
+            setCurrentTransferId(null);
+
+            // Process next file in queue
+            setTimeout(() => processQueue(), 100);
 
         } catch (error: any) {
             console.error('Send file error:', error);
@@ -855,9 +909,17 @@ const P2PShare: React.FC = () => {
                 >
                     <ArrowRight size={16} className="rotate-180" /> Abort Sequence
                 </button>
-                <div className={`px-4 py-1 font-display text-sm font-bold uppercase tracking-wider rounded-full flex items-center gap-2 ${connectionStatus === 'connected' ? 'bg-[#00f3ff]/20 text-[#00f3ff]' : 'bg-[#222] text-gray-500'}`}>
-                    <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-[#00f3ff] animate-pulse' : 'bg-gray-500'}`}></div>
-                    {connectionStatus}
+                <div className="flex items-center gap-3">
+                    {/* Show peer name when connected */}
+                    {connectionStatus === 'connected' && peerUsername && (
+                        <span className="text-[#bc13fe] font-mono text-xs">
+                            {peerUsername}
+                        </span>
+                    )}
+                    <div className={`px-4 py-1 font-display text-sm font-bold uppercase tracking-wider rounded-full flex items-center gap-2 ${connectionStatus === 'connected' ? 'bg-[#00f3ff]/20 text-[#00f3ff]' : 'bg-[#222] text-gray-500'}`}>
+                        <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-[#00f3ff] animate-pulse' : 'bg-gray-500'}`}></div>
+                        {connectionStatus}
+                    </div>
                 </div>
             </div>
 
@@ -973,8 +1035,13 @@ const P2PShare: React.FC = () => {
                                                 {msg.sender === 'system' ? (
                                                     <span className="text-[9px] text-gray-600 font-mono border border-gray-800 px-2 py-0.5 rounded-full my-1">{msg.text}</span>
                                                 ) : (
-                                                    <div className={`max-w-[85%] p-2 rounded text-xs font-mono leading-relaxed break-words ${msg.sender === 'me' ? 'bg-[#00f3ff]/10 text-[#00f3ff] border border-[#00f3ff]/20 rounded-tr-none' : 'bg-[#bc13fe]/10 text-[#bc13fe] border border-[#bc13fe]/20 rounded-tl-none'}`}>
-                                                        {msg.text}
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className={`text-[9px] font-mono ${msg.sender === 'me' ? 'text-[#00f3ff]/60' : 'text-[#bc13fe]/60'}`}>
+                                                            {msg.sender === 'me' ? (myUsername || 'You') : (peerUsername || 'Peer')}
+                                                        </span>
+                                                        <div className={`max-w-[85%] p-2 rounded text-xs font-mono leading-relaxed break-words ${msg.sender === 'me' ? 'bg-[#00f3ff]/10 text-[#00f3ff] border border-[#00f3ff]/20 rounded-tr-none' : 'bg-[#bc13fe]/10 text-[#bc13fe] border border-[#bc13fe]/20 rounded-tl-none'}`}>
+                                                            {msg.text}
+                                                        </div>
                                                     </div>
                                                 )}
                                                 {msg.sender !== 'system' && <span className="text-[8px] text-gray-700 mt-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
@@ -1149,7 +1216,7 @@ const P2PShare: React.FC = () => {
                                 )}
 
                                 {/* Progress Bar */}
-                                {(transferProgress > 0 && transferProgress < 100) && (
+                                {((transferProgress > 0 && mode === 'send') || (receivedMeta && !receivedFileUrl)) && (
                                     <div className="mt-8">
                                         <div className="flex justify-between items-center text-xs font-mono text-gray-400 mb-2">
                                             <span>TRANSFER_STATUS</span>

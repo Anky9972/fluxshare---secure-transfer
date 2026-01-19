@@ -6,7 +6,8 @@ import { notificationService } from '../services/notificationService';
 import { audioService } from '../services/audioService';
 
 declare const Peer: any;
-const CHUNK_SIZE = 16 * 1024; // 16KB chunks
+const CHUNK_SIZE = 64 * 1024; // 64KB chunks
+const MAX_BUFFERED_AMOUNT = 16 * 1024 * 1024; // 16MB Backpressure limit
 
 type Mode = 'selection' | 'host' | 'client';
 
@@ -310,32 +311,50 @@ const SFTPManager: React.FC = () => {
     });
   };
 
-  const streamFileToClient = (conn: any, file: File) => {
+  const streamFileToClient = async (conn: any, file: File) => {
     conn.send({ type: 'FILE_START', name: file.name, size: file.size, mime: file.type });
 
-    const reader = new FileReader();
-    let offset = 0;
-
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        conn.send({ type: 'FILE_CHUNK', data: e.target.result });
-        offset += CHUNK_SIZE;
-
-        if (offset < file.size) {
-          // Yield to the event loop to prevent UI freezing
-          setTimeout(() => {
-            const slice = file.slice(offset, offset + CHUNK_SIZE);
-            reader.readAsArrayBuffer(slice);
-          }, 0);
-        } else {
-          conn.send({ type: 'FILE_END' });
-          addServerLog(`Transfer complete: ${file.name}`);
-        }
-      }
+    const readChunk = async (start: number, end: number): Promise<ArrayBuffer> => {
+      return new Promise((resolve, reject) => {
+        const slice = file.slice(start, end);
+        const r = new FileReader();
+        r.onload = (e) => resolve(e.target?.result as ArrayBuffer);
+        r.onerror = (e) => reject(e.target?.error);
+        r.readAsArrayBuffer(slice);
+      });
     };
 
-    const firstSlice = file.slice(0, CHUNK_SIZE);
-    reader.readAsArrayBuffer(firstSlice);
+    let offset = 0;
+    const finalSize = file.size;
+
+    try {
+      while (offset < finalSize) {
+        // Check backpressure
+        if (conn.dataChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+          await new Promise(r => setTimeout(r, 50));
+          continue;
+        }
+
+        const chunk = await readChunk(offset, offset + CHUNK_SIZE);
+        if (chunk.byteLength > 0) {
+          conn.send({ type: 'FILE_CHUNK', data: chunk });
+        }
+
+        offset += chunk.byteLength;
+
+        // Slight yield every few chunks to allow UI events (important for large files)
+        if (offset % (CHUNK_SIZE * 5) === 0) {
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      conn.send({ type: 'FILE_END' });
+      addServerLog(`Transfer complete: ${file.name}`);
+
+    } catch (err) {
+      console.error("SFTP Stream Error:", err);
+      conn.send({ type: 'ERROR', message: 'File read error during stream' });
+    }
   };
 
   const addServerLog = (msg: string) => {

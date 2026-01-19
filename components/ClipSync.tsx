@@ -34,14 +34,15 @@ const ClipSync: React.FC = () => {
     const peerRef = useRef<any>(null);
     const connRef = useRef<any>(null);
 
-    // Load clips on mount and set up refresh interval
+    // Load clips on mount and set up refresh interval - OPTIMIZED: 5s instead of 1s
     useEffect(() => {
         refreshClips();
-        const interval = setInterval(refreshClips, 1000);
+        // Only poll if we need to show updated clips - use longer interval
+        const interval = setInterval(refreshClips, 5000);
         return () => clearInterval(interval);
     }, [searchQuery, categoryFilter]);
 
-    // Auto-capture clipboard monitoring
+    // Auto-capture clipboard monitoring - OPTIMIZED: 3s instead of 2s
     useEffect(() => {
         if (!autoCapture) return;
 
@@ -61,12 +62,12 @@ const ClipSync: React.FC = () => {
             }
         };
 
-        // Check clipboard every 2 seconds
-        const interval = setInterval(monitorClipboard, 2000);
+        // Check clipboard every 3 seconds (optimized from 2s)
+        const interval = setInterval(monitorClipboard, 3000);
         return () => clearInterval(interval);
     }, [autoCapture, lastClipboardContent]);
 
-    // Batch capture monitoring (30 second timer)
+    // Batch capture monitoring (30 second timer) - OPTIMIZED: 2s instead of 1s
     useEffect(() => {
         if (!batchCapture) return;
 
@@ -84,7 +85,8 @@ const ClipSync: React.FC = () => {
             }
         };
 
-        const interval = setInterval(monitorClipboard, 1000);
+        // Optimized to 2s interval
+        const interval = setInterval(monitorClipboard, 2000);
         return () => clearInterval(interval);
     }, [batchCapture, lastClipboardContent]);
 

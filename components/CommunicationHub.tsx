@@ -122,7 +122,14 @@ const CommunicationHub: React.FC = () => {
 
                 // Get local stream immediately for preview
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            width: { ideal: 1280, max: 1920 },
+                            height: { ideal: 720, max: 1080 },
+                            frameRate: { ideal: 30, max: 60 }
+                        },
+                        audio: true
+                    });
                     localStreamRef.current = stream;
                     if (localVideoRef.current) {
                         localVideoRef.current.srcObject = stream;
@@ -374,8 +381,14 @@ const CommunicationHub: React.FC = () => {
             }
 
             // Get new stream with flipped camera
+            // Get new stream with flipped camera
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: newFacingMode },
+                video: {
+                    facingMode: newFacingMode,
+                    width: { ideal: 1280, max: 1920 },
+                    height: { ideal: 720, max: 1080 },
+                    frameRate: { ideal: 30, max: 60 }
+                },
                 audio: true
             });
 

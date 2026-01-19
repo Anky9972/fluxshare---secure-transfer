@@ -1,0 +1,270 @@
+@import "tailwindcss";
+
+/* ========================================
+   FluxShare UI Enhancement Styles
+   ======================================== */
+
+/* Shimmer animation for skeletons */
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.animate-shimmer {
+    animation: shimmer 2s infinite linear;
+}
+
+/* Scan animation for empty states */
+@keyframes scan {
+    0% { top: 0; opacity: 0; }
+    50% { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+}
+
+.animate-scan {
+    animation: scan 2s infinite ease-in-out;
+}
+
+/* Glitch slide for error states */
+@keyframes glitch-slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+}
+
+.animate-glitch-slide {
+    animation: glitch-slide 3s infinite linear;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+    animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Pulse glow effect */
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 5px currentColor; }
+    50% { box-shadow: 0 0 20px currentColor, 0 0 40px currentColor; }
+}
+
+.animate-pulse-glow {
+    animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* Spin slow for loading indicators */
+@keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+    animation: spin-slow 3s infinite linear;
+}
+
+/* ========================================
+   Mobile Touch Target Improvements
+   ======================================== */
+
+/* Ensure minimum touch target size of 44px on mobile */
+@media (max-width: 768px) {
+    /* Buttons */
+    button, 
+    [role="button"],
+    .touch-target {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Input fields */
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="search"],
+    textarea,
+    select {
+        min-height: 48px;
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    /* Tab buttons */
+    .tab-button {
+        padding: 12px 16px;
+        min-height: 48px;
+    }
+
+    /* Icon buttons */
+    .icon-button {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Modal close buttons */
+    .modal-close {
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* List items that are clickable */
+    .list-item-clickable {
+        min-height: 56px;
+        padding: 12px 16px;
+    }
+
+    /* Increase spacing between touch targets */
+    .touch-spacing > * + * {
+        margin-top: 8px;
+    }
+}
+
+/* ========================================
+   Improved Focus States for Accessibility
+   ======================================== */
+
+/* Focus ring for keyboard navigation */
+*:focus-visible {
+    outline: 2px solid #00f3ff;
+    outline-offset: 2px;
+}
+
+/* Remove focus ring for mouse users */
+*:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Custom focus styles for specific elements */
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid #00f3ff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(0, 243, 255, 0.2);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+    outline: none;
+    border-color: #00f3ff;
+    box-shadow: 0 0 0 3px rgba(0, 243, 255, 0.2);
+}
+
+/* ========================================
+   Better Scrollbar Styling
+   ======================================== */
+
+/* Thin scrollbar for all scrollable areas */
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #333 transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #00f3ff;
+}
+
+/* ========================================
+   Loading State Utilities
+   ======================================== */
+
+/* Disable interactions during loading */
+.loading-state {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+/* Skeleton placeholder base */
+.skeleton {
+    background: linear-gradient(90deg, #1a1a2e 0%, #2a2a4e 50%, #1a1a2e 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+
+/* ========================================
+   Improved Button States
+   ======================================== */
+
+/* Disabled button styles */
+button:disabled,
+.btn-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Loading button */
+.btn-loading {
+    position: relative;
+    color: transparent;
+}
+
+.btn-loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+    border-right-color: transparent;
+    animation: spin-slow 0.6s linear infinite;
+}
+
+/* ========================================
+   Card Hover Effects
+   ======================================== */
+
+.card-hover {
+    transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.card-hover:active {
+    transform: translateY(0);
+}
+
+/* ========================================
+   Safe Area Padding for Mobile
+   ======================================== */
+
+@supports (padding: env(safe-area-inset-bottom)) {
+    .safe-bottom {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    
+    .safe-top {
+        padding-top: env(safe-area-inset-top);
+    }
+}
