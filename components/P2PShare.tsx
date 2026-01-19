@@ -2,9 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Download, Monitor, Video, Copy, QrCode, X, FileText, Image as ImageIcon, Music, Film, Archive, RefreshCw, Smartphone, Shield, AlertTriangle, Check, Clock, Globe, Zap, Search, Sun, Moon, Link, Eye, Share2, BarChart2, ArrowRight, Bot, Sparkles, Terminal, MessageSquare, ShieldCheck, UploadCloud, Lock, Unlock, Loader2, CheckCircle2, Wifi, Pause, Play, XCircle } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { peerService } from '../services/peerService';
-import { networkDiscoveryService } from '../services/networkDiscoveryService';
 import { FileTransfer, ChatMessage } from '../types';
-import NearbyPeers from './NearbyPeers';
 import FilePreviewModal from './FilePreviewModal';
 import QRCodeGenerator from './shared/QRCodeGenerator';
 import FavoritesPanel from './FavoritesPanel';
@@ -156,11 +154,6 @@ const P2PShare: React.FC = () => {
                 
                 // Store peer reference for compatibility
                 peerRef.current = peerService.getPeer();
-                
-                // Initialize network discovery
-                const codename = await networkDiscoveryService.initialize(peerRef.current, id);
-                networkDiscoveryService.startDiscovery();
-                addLog(`Discovery active. Codename: ${codename}`);
                 
             } catch (err: any) {
                 console.error("Peer initialization error:", err);
@@ -990,16 +983,6 @@ const P2PShare: React.FC = () => {
                     </div>
 
                     <FavoritesPanel onPeerSelect={(id) => { setTargetId(id); setTimeout(() => { const connectBtn = document.querySelector('[data-connect-btn]'); connectBtn?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 100); }} className="shrink-0" />
-
-                    {/* Nearby Peers - Network Discovery */}
-                    <NearbyPeers 
-                        onConnect={(peerId) => {
-                            setTargetId(peerId);
-                            setTimeout(connectToPeer, 100);
-                        }}
-                        isConnected={connectionStatus === 'connected'}
-                        currentPeerId={connRef.current?.peer}
-                    />
 
                     {connectionStatus !== 'connected' && (
                         <div className="p-4 border border-[#bc13fe]/30 bg-[#0a0a15] rounded-lg shrink-0">

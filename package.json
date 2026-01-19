@@ -49,6 +49,7 @@
     "concurrently": "^9.2.1",
     "happy-dom": "^20.0.11",
     "peer": "^1.0.2",
+    "terser": "^5.46.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vitest": "^4.0.15"
