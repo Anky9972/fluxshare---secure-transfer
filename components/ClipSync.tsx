@@ -270,28 +270,44 @@ const ClipSync: React.FC = () => {
         }
     };
 
-    // P2P Peer Initialization
+    // P2P Peer Initialization - wait for PeerJS to load
     useEffect(() => {
-        if (typeof Peer === 'undefined') return;
-        const id = `CLIP-${Math.floor(Math.random() * 9000) + 1000}`;
-        const iceServers = (import.meta.env.VITE_ICE_SERVERS || 'stun:stun.l.google.com:19302').split(',').map((url: string) => ({ urls: url.trim() }));
-        const peerConfig: any = { debug: 2, config: { iceServers } };
-        const envHost = import.meta.env.VITE_PEER_HOST;
-        if (envHost && envHost.trim() !== '') {
-            peerConfig.host = envHost;
-            peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
-            peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
-            peerConfig.secure = import.meta.env.VITE_PEER_SECURE === 'true';
-        } else {
-            // Use public PeerJS cloud server as default
-            peerConfig.host = '0.peerjs.com';
-            peerConfig.port = 443;
-            peerConfig.path = '/';
-            peerConfig.secure = true;
-        }
-        const peer = new Peer(id, peerConfig);
-        peer.on('open', (id: string) => setPeerId(id));
-        peer.on('connection', (conn: any) => {
+        let isMounted = true;
+        let peer: any = null;
+
+        const initPeer = () => {
+            if (typeof Peer === 'undefined') {
+                // Retry after a short delay if PeerJS is still loading
+                setTimeout(() => {
+                    if (isMounted) initPeer();
+                }, 100);
+                return;
+            }
+
+            const id = `CLIP-${Math.floor(Math.random() * 9000) + 1000}`;
+            const iceServers = (import.meta.env.VITE_ICE_SERVERS || 'stun:stun.l.google.com:19302').split(',').map((url: string) => ({ urls: url.trim() }));
+            const peerConfig: any = { debug: 2, config: { iceServers } };
+            const envHost = import.meta.env.VITE_PEER_HOST;
+            if (envHost && envHost.trim() !== '') {
+                peerConfig.host = envHost;
+                peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
+                peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
+                peerConfig.secure = import.meta.env.VITE_PEER_SECURE === 'true';
+            } else {
+                // Use public PeerJS cloud server as default
+                peerConfig.host = '0.peerjs.com';
+                peerConfig.port = 443;
+                peerConfig.path = '/';
+                peerConfig.secure = true;
+            }
+            peer = new Peer(id, peerConfig);
+            peer.on('open', (id: string) => {
+                if (isMounted) setPeerId(id);
+            });
+            peer.on('error', (err: any) => {
+                console.error('[ClipSync] Peer error:', err);
+            });
+            peer.on('connection', (conn: any) => {
             connRef.current = conn;
             setConnectionStatus('connected');
             conn.on('data', (data: any) => {
@@ -319,7 +335,14 @@ const ClipSync: React.FC = () => {
             conn.on('close', () => { setConnectionStatus('disconnected'); connRef.current = null; audioService.playSound('disconnect'); });
         });
         peerRef.current = peer;
-        return () => { if (peerRef.current) peerRef.current.destroy(); };
+        };
+
+        initPeer();
+
+        return () => { 
+            isMounted = false;
+            if (peerRef.current) peerRef.current.destroy(); 
+        };
     }, []);
 
 

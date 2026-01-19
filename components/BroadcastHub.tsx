@@ -112,7 +112,25 @@ const BroadcastHub: React.FC = () => {
 
     // Initialize Peer when settings change
     useEffect(() => {
+        let isMounted = true;
+
+        const waitForPeer = (): Promise<void> => {
+            return new Promise((resolve) => {
+                const check = (attempts = 0) => {
+                    if (typeof Peer !== 'undefined') {
+                        resolve();
+                    } else if (attempts < 50 && isMounted) {
+                        setTimeout(() => check(attempts + 1), 100);
+                    }
+                };
+                check();
+            });
+        };
+
         const initPeer = async () => {
+            await waitForPeer();
+            if (!isMounted) return;
+
             if (peerRef.current) {
                 peerRef.current.destroy();
                 peerRef.current = null;
@@ -188,6 +206,7 @@ const BroadcastHub: React.FC = () => {
         initPeer();
 
         return () => {
+            isMounted = false;
             if (peerRef.current) {
                 peerRef.current.destroy();
             }

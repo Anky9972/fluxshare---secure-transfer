@@ -93,6 +93,12 @@ const SFTPManager: React.FC = () => {
   // HOST LOGIC (SERVER)
   // =======================
   const startServer = () => {
+    if (typeof Peer === 'undefined') {
+      addServerLog('ERROR: PeerJS library not loaded yet. Please wait and try again.');
+      notificationService.showToast({ type: 'error', message: 'PeerJS not loaded. Try again in a moment.' });
+      return;
+    }
+
     const id = `FLUX-HOST-${Math.floor(Math.random() * 9000) + 1000}`;
 
     // Parse ICE servers from env
@@ -457,6 +463,11 @@ const SFTPManager: React.FC = () => {
   // CLIENT LOGIC
   // =======================
   const connectToServer = () => {
+    if (typeof Peer === 'undefined') {
+      notificationService.showToast({ type: 'error', message: 'PeerJS not loaded. Try again in a moment.' });
+      return;
+    }
+
     const target = targetHostId.trim();
     if (!target) return;
 

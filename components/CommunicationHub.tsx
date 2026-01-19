@@ -56,7 +56,25 @@ const CommunicationHub: React.FC = () => {
     const connRef = useRef<any>(null);
 
     useEffect(() => {
+        let isMounted = true;
+
+        const waitForPeer = (): Promise<void> => {
+            return new Promise((resolve) => {
+                const check = (attempts = 0) => {
+                    if (typeof Peer !== 'undefined') {
+                        resolve();
+                    } else if (attempts < 50 && isMounted) {
+                        setTimeout(() => check(attempts + 1), 100);
+                    }
+                };
+                check();
+            });
+        };
+
         const initPeer = async () => {
+            await waitForPeer();
+            if (!isMounted) return;
+
             try {
                 const id = `FLUX-COMM-${Math.floor(Math.random() * 9000) + 1000}`;
 
@@ -147,6 +165,7 @@ const CommunicationHub: React.FC = () => {
         initPeer();
 
         return () => {
+            isMounted = false;
             if (localStreamRef.current) {
                 localStreamRef.current.getTracks().forEach(track => track.stop());
             }
