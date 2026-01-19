@@ -1,5 +1,5 @@
 // Network Discovery Service - Find peers on the same local network
-// Uses PeerJS broadcast channel for peer discovery
+// Uses PeerJS server API for peer discovery
 
 import { generateCodename, generateCodenameFromSeed } from '../utils/codenameGenerator';
 import { storageService } from './storageService';
@@ -15,26 +15,36 @@ export interface DiscoveredPeer {
 
 type DiscoveryCallback = (peers: DiscoveredPeer[]) => void;
 
-const DISCOVERY_CHANNEL = 'FLUXSHARE-DISCOVERY';
-const HEARTBEAT_INTERVAL = 5000; // 5 seconds
-const PEER_TIMEOUT = 15000; // 15 seconds - peer considered offline
 const STORAGE_KEY = 'fluxshare_my_codename';
+const SCAN_INTERVAL = 10000; // 10 seconds
+const PEER_TIMEOUT = 30000; // 30 seconds
+
+// Discovery API endpoint - same server as PeerJS
+const getDiscoveryApiUrl = (): string => {
+  // Check for production (Render deployment)
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    // In production, use the deployed peer server
+    return 'https://peer-server-g3ji.onrender.com';
+  }
+  // Local development - same port as PeerJS server
+  return 'http://localhost:9000';
+};
 
 class NetworkDiscoveryService {
   private peers: Map<string, DiscoveredPeer> = new Map();
   private myCodename: string = '';
   private myPeerId: string = '';
-  private discoveryConn: any = null;
-  private heartbeatTimer: number | null = null;
-  private cleanupTimer: number | null = null;
+  private scanTimer: number | null = null;
   private callbacks: Set<DiscoveryCallback> = new Set();
   private peerInstance: any = null;
   private isActive: boolean = false;
+  private apiUrl: string = '';
 
   // Initialize discovery with a peer instance
   async initialize(peer: any, peerId: string): Promise<string> {
     this.peerInstance = peer;
     this.myPeerId = peerId;
+    this.apiUrl = getDiscoveryApiUrl();
     
     // Load or generate codename
     const savedCodename = localStorage.getItem(STORAGE_KEY);
@@ -51,38 +61,56 @@ class NetworkDiscoveryService {
       localStorage.setItem(STORAGE_KEY, this.myCodename);
     }
 
+    // Register our metadata with the server
+    await this.registerMetadata();
+
     return this.myCodename;
   }
 
-  // Start broadcasting presence and listening for peers
+  // Register our metadata with the discovery server
+  private async registerMetadata(): Promise<void> {
+    try {
+      const settings = storageService.getSettings();
+      await fetch(`${this.apiUrl}/api/peers/${this.myPeerId}/metadata`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          codename: this.myCodename,
+          displayName: settings.username,
+          status: 'online'
+        })
+      });
+    } catch (err) {
+      console.warn('[Discovery] Failed to register metadata:', err);
+    }
+  }
+
+  // Start scanning for peers
   startDiscovery(): void {
-    if (this.isActive || !this.peerInstance) return;
+    if (this.isActive) return;
     this.isActive = true;
 
-    // Set up listener for incoming discovery pings
-    this.peerInstance.on('connection', (conn: any) => {
-      conn.on('data', (data: any) => {
-        if (data.type === 'discovery-ping') {
-          this.handleDiscoveryPing(data, conn);
-        } else if (data.type === 'discovery-pong') {
-          this.handleDiscoveryPong(data);
-        }
+    // Set up listener for incoming discovery messages via PeerJS
+    if (this.peerInstance) {
+      this.peerInstance.on('connection', (conn: any) => {
+        conn.on('data', (data: any) => {
+          if (data.type === 'discovery-ping') {
+            this.handleDiscoveryPing(data, conn);
+          } else if (data.type === 'discovery-pong') {
+            this.handleDiscoveryPong(data);
+          }
+        });
       });
-    });
+    }
 
-    // Start heartbeat - broadcast presence periodically
-    this.heartbeatTimer = window.setInterval(() => {
-      this.broadcastPresence();
-    }, HEARTBEAT_INTERVAL);
+    // Initial scan
+    this.scanForPeers();
 
-    // Start cleanup - remove stale peers
-    this.cleanupTimer = window.setInterval(() => {
-      this.cleanupStalePeers();
-    }, PEER_TIMEOUT / 2);
+    // Periodic scan
+    this.scanTimer = window.setInterval(() => {
+      this.scanForPeers();
+    }, SCAN_INTERVAL);
 
-    // Initial broadcast
-    this.broadcastPresence();
-    
     console.log('[Discovery] Started with codename:', this.myCodename);
   }
 
@@ -90,59 +118,116 @@ class NetworkDiscoveryService {
   stopDiscovery(): void {
     this.isActive = false;
     
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
-    
-    if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = null;
+    if (this.scanTimer) {
+      clearInterval(this.scanTimer);
+      this.scanTimer = null;
     }
 
     console.log('[Discovery] Stopped');
   }
 
-  // Broadcast our presence to a known peer
-  private broadcastPresence(): void {
-    if (!this.peerInstance || !this.isActive) return;
+  // Scan for peers via server API
+  async scanForPeers(): Promise<DiscoveredPeer[]> {
+    if (!this.myPeerId) return [];
 
-    // We need to ping known peers to discover them
-    // In a real scenario, we'd use a discovery server or mDNS
-    // For now, we'll try connecting to recently seen peers
-    
-    const settings = storageService.getSettings();
-    const status = 'online'; // Could be based on user setting
-
-    // Send to all currently known peers
-    this.peers.forEach((peer, peerId) => {
-      try {
-        const conn = this.peerInstance.connect(peerId, { reliable: true });
-        conn.on('open', () => {
-          conn.send({
-            type: 'discovery-ping',
-            peerId: this.myPeerId,
-            codename: this.myCodename,
-            displayName: settings.username,
-            status,
-            timestamp: Date.now()
-          });
-          // Close after sending
-          setTimeout(() => conn.close(), 1000);
-        });
-      } catch (err) {
-        // Peer might be offline
+    try {
+      const response = await fetch(`${this.apiUrl}/api/peers?exclude=${this.myPeerId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-    });
+
+      const data = await response.json();
+      
+      if (data.success && Array.isArray(data.peers)) {
+        // Update our peers map
+        const now = Date.now();
+        
+        for (const serverPeer of data.peers) {
+          const existingPeer = this.peers.get(serverPeer.id);
+          
+          // Generate codename from peer ID if server doesn't have it
+          const codename = serverPeer.codename || generateCodenameFromSeed(serverPeer.id);
+          
+          this.peers.set(serverPeer.id, {
+            peerId: serverPeer.id,
+            codename: codename,
+            displayName: serverPeer.displayName || undefined,
+            lastSeen: serverPeer.lastSeen || now,
+            signalStrength: this.calculateSignalStrength(serverPeer.lastSeen || now),
+            status: serverPeer.status || 'online'
+          });
+        }
+
+        // Remove peers that are no longer on the server
+        const serverPeerIds = new Set(data.peers.map((p: any) => p.id));
+        this.peers.forEach((_, peerId) => {
+          if (!serverPeerIds.has(peerId)) {
+            this.peers.delete(peerId);
+          }
+        });
+
+        this.notifyCallbacks();
+
+        // Also ping discovered peers for extra info
+        for (const serverPeer of data.peers) {
+          this.pingPeer(serverPeer.id);
+        }
+      }
+    } catch (err) {
+      console.warn('[Discovery] Scan failed:', err);
+      // Don't clear peers on error, keep showing last known
+    }
+
+    return this.getPeers();
+  }
+
+  // Ping a peer directly for real-time info
+  private pingPeer(peerId: string): void {
+    if (!this.peerInstance || peerId === this.myPeerId) return;
+
+    try {
+      const conn = this.peerInstance.connect(peerId, { reliable: true });
+      const settings = storageService.getSettings();
+      
+      conn.on('open', () => {
+        conn.send({
+          type: 'discovery-ping',
+          peerId: this.myPeerId,
+          codename: this.myCodename,
+          displayName: settings.username,
+          status: 'online',
+          timestamp: Date.now()
+        });
+
+        // Listen for response
+        conn.on('data', (data: any) => {
+          if (data.type === 'discovery-pong') {
+            this.handleDiscoveryPong(data);
+          }
+        });
+
+        // Close after timeout
+        setTimeout(() => {
+          try { conn.close(); } catch {}
+        }, 3000);
+      });
+
+      conn.on('error', () => {
+        // Peer not reachable directly
+      });
+    } catch (err) {
+      // Ignore connection errors
+    }
   }
 
   // Handle incoming discovery ping
   private handleDiscoveryPing(data: any, conn: any): void {
     const { peerId, codename, displayName, status, timestamp } = data;
     
-    if (peerId === this.myPeerId) return; // Ignore self
+    if (peerId === this.myPeerId) return;
 
-    // Update or add peer
+    // Update peer info
     this.addOrUpdatePeer({
       peerId,
       codename: codename || generateCodenameFromSeed(peerId),
@@ -154,21 +239,23 @@ class NetworkDiscoveryService {
 
     // Send pong response
     const settings = storageService.getSettings();
-    conn.send({
-      type: 'discovery-pong',
-      peerId: this.myPeerId,
-      codename: this.myCodename,
-      displayName: settings.username,
-      status: 'online',
-      timestamp: Date.now()
-    });
+    try {
+      conn.send({
+        type: 'discovery-pong',
+        peerId: this.myPeerId,
+        codename: this.myCodename,
+        displayName: settings.username,
+        status: 'online',
+        timestamp: Date.now()
+      });
+    } catch {}
   }
 
   // Handle discovery pong response
   private handleDiscoveryPong(data: any): void {
     const { peerId, codename, displayName, status, timestamp } = data;
     
-    if (peerId === this.myPeerId) return; // Ignore self
+    if (peerId === this.myPeerId) return;
 
     this.addOrUpdatePeer({
       peerId,
@@ -192,73 +279,16 @@ class NetworkDiscoveryService {
 
   // Calculate signal strength based on response time
   private calculateSignalStrength(timestamp: number): 'strong' | 'medium' | 'weak' {
-    const latency = Date.now() - timestamp;
-    if (latency < 100) return 'strong';
-    if (latency < 500) return 'medium';
+    const age = Date.now() - timestamp;
+    if (age < 5000) return 'strong';
+    if (age < 15000) return 'medium';
     return 'weak';
-  }
-
-  // Remove peers that haven't been seen recently
-  private cleanupStalePeers(): void {
-    const now = Date.now();
-    let changed = false;
-
-    this.peers.forEach((peer, peerId) => {
-      if (now - peer.lastSeen > PEER_TIMEOUT) {
-        this.peers.delete(peerId);
-        changed = true;
-      }
-    });
-
-    if (changed) {
-      this.notifyCallbacks();
-    }
-  }
-
-  // Manually scan for peers by trying to connect to discovery channel
-  async scanForPeers(): Promise<DiscoveredPeer[]> {
-    // Try to connect to the discovery channel on the peer server
-    // This is a simple approach - in production you'd use a proper discovery mechanism
-    
-    return Array.from(this.peers.values());
   }
 
   // Manually add a peer ID to discover
   discoverPeer(peerId: string): void {
     if (peerId === this.myPeerId || !this.peerInstance) return;
-
-    try {
-      const conn = this.peerInstance.connect(peerId, { reliable: true });
-      const settings = storageService.getSettings();
-      
-      conn.on('open', () => {
-        // Send discovery ping
-        conn.send({
-          type: 'discovery-ping',
-          peerId: this.myPeerId,
-          codename: this.myCodename,
-          displayName: settings.username,
-          status: 'online',
-          timestamp: Date.now()
-        });
-
-        // Listen for response
-        conn.on('data', (data: any) => {
-          if (data.type === 'discovery-pong') {
-            this.handleDiscoveryPong(data);
-          }
-        });
-
-        // Close after timeout
-        setTimeout(() => conn.close(), 5000);
-      });
-
-      conn.on('error', () => {
-        // Peer not reachable
-      });
-    } catch (err) {
-      console.error('[Discovery] Error discovering peer:', err);
-    }
+    this.pingPeer(peerId);
   }
 
   // Get all discovered peers
@@ -276,13 +306,13 @@ class NetworkDiscoveryService {
   regenerateCodename(): string {
     this.myCodename = generateCodename();
     localStorage.setItem(STORAGE_KEY, this.myCodename);
+    this.registerMetadata(); // Update server
     return this.myCodename;
   }
 
   // Subscribe to peer updates
   subscribe(callback: DiscoveryCallback): () => void {
     this.callbacks.add(callback);
-    // Immediately call with current peers
     callback(this.getPeers());
     
     return () => {

@@ -105,14 +105,14 @@ class PeerService {
                 // @ts-ignore
                 peerConfig.port = Number(import.meta.env.VITE_PEER_PORT) || 443;
                 // @ts-ignore
-                peerConfig.path = import.meta.env.VITE_PEER_PATH || '/';
+                peerConfig.path = import.meta.env.VITE_PEER_PATH || '/peerjs';
                 // @ts-ignore
                 peerConfig.secure = import.meta.env.VITE_PEER_SECURE === 'true';
             } else {
-                // Use public PeerJS cloud server as default
-                peerConfig.host = '0.peerjs.com';
+                // Use our deployed FluxShare peer server
+                peerConfig.host = 'peer-server-g3ji.onrender.com';
                 peerConfig.port = 443;
-                peerConfig.path = '/';
+                peerConfig.path = '/peerjs';
                 peerConfig.secure = true;
             }
 
